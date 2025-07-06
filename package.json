@@ -1,0 +1,65 @@
+{
+  "name": "vscode-ask-human-mcp",
+  "displayName": "VS Code Ask Human MCP Server",
+  "description": "Enable AI Agents to ask questions to developers through VS Code",
+  "version": "1.0.0",
+  "license": "MIT",
+  "engines": {
+    "vscode": "^1.99.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "keywords": [
+    "MCP"
+  ],
+  "activationEvents": [
+    "onStartupFinished"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "askHumanVscode.toggleMCPServer",
+        "title": "Toggle MCP Server"
+      }
+    ],
+    "configuration": {
+      "title": "Ask Human VS Code",
+      "properties": {
+        "askHumanVscode.port": {
+          "type": "number",
+          "default": 11911,
+          "description": "Port number for the MCP server",
+          "minimum": 1024,
+          "maximum": 65535
+        }
+      }
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "pretest": "npm run compile && npm run lint",
+    "lint": "eslint src",
+    "test": "vscode-test"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.15.0",
+    "zod": "^3.23.0",
+    "express": "^5.1.0"
+  },
+  "devDependencies": {
+    "@types/vscode": "^1.74.0",
+    "@types/mocha": "^10.0.10",
+    "@types/node": "20.x",
+    "@types/express": "^5.0.3",
+    "@typescript-eslint/eslint-plugin": "^8.31.1",
+    "@typescript-eslint/parser": "^8.31.1",
+    "eslint": "^9.25.1",
+    "typescript": "^5.8.3",
+    "@vscode/test-cli": "^0.0.10",
+    "@vscode/test-electron": "^2.5.2"
+  }
+}
