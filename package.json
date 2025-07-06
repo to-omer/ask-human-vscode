@@ -3,7 +3,12 @@
   "displayName": "VS Code Ask Human MCP Server",
   "description": "Enable AI Agents to ask questions to developers through VS Code",
   "version": "1.0.0",
+  "publisher": "to-omer",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/to-omer/ask-human-vscode.git"
+  },
   "engines": {
     "vscode": "^1.99.0"
   },
