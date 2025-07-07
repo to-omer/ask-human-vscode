@@ -26,6 +26,16 @@ export class HumanMCPServer {
     this.port = port;
   }
 
+  private getToolDescription(): string {
+    const config = vscode.workspace.getConfiguration("askHumanVscode");
+    return config.get<string>("toolDescription")!;
+  }
+
+  private getQuestionDescription(): string {
+    const config = vscode.workspace.getConfiguration("askHumanVscode");
+    return config.get<string>("questionDescription")!;
+  }
+
   private getServer() {
     const server = new McpServer({
       name: "vscode-ask-human-mcp",
@@ -36,9 +46,9 @@ export class HumanMCPServer {
       "ask-human-vscode",
       {
         title: "Ask Human in VS Code",
-        description: "Ask a question to the developer in VS Code",
+        description: this.getToolDescription(),
         inputSchema: {
-          question: z.string().describe("Question to ask the developer"),
+          question: z.string().describe(this.getQuestionDescription()),
         },
       },
       async ({ question }) => {

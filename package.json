@@ -38,6 +38,26 @@
           "description": "Port number for the MCP server",
           "minimum": 1024,
           "maximum": 65535
+        },
+        "askHumanVscode.toolDescription": {
+          "type": "string",
+          "default": "Ask the developer when human judgment or context is needed for decision-making",
+          "description": "Description text for the ask-human tool (when and who to ask)",
+          "examples": [
+            "Ask the developer when human judgment or decision-making is needed",
+            "Ask the human developer when code analysis alone is insufficient",
+            "Ask the developer for clarification on requirements or design decisions"
+          ]
+        },
+        "askHumanVscode.questionDescription": {
+          "type": "string",
+          "default": "Question with relevant context, current situation, and specific guidance needed",
+          "description": "Description text for the question parameter (what to include in questions)",
+          "examples": [
+            "Question with context, current situation, and specific help needed",
+            "Question including relevant code, attempted approaches, and expected outcome",
+            "Question with background information, options considered, and decision criteria"
+          ]
         }
       }
     }
