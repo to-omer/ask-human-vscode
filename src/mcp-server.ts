@@ -36,6 +36,46 @@ export class HumanMCPServer {
     return config.get<string>("questionDescription")!;
   }
 
+  private setupResponseLogging(
+    req: express.Request,
+    res: express.Response,
+  ): void {
+    const responseChunks: Buffer[] = [];
+    const outputChannel = this.outputChannel;
+    let logged = false;
+
+    const addChunk = (chunk: any) => {
+      if (typeof chunk === "string") {
+        responseChunks.push(Buffer.from(chunk));
+      } else if (Buffer.isBuffer(chunk)) {
+        responseChunks.push(chunk);
+      }
+    };
+
+    const originalWrite = res.write.bind(res);
+    res.write = function (chunk: any, encoding?: any, callback?: any) {
+      addChunk(chunk);
+      return originalWrite(chunk, encoding, callback);
+    };
+
+    const originalEnd = res.end.bind(res);
+    res.end = function (chunk?: any, encoding?: any, callback?: any) {
+      if (chunk) {
+        addChunk(chunk);
+      }
+      if (!logged) {
+        const fullResponse = Buffer.concat(responseChunks)
+          .toString("utf-8")
+          .trim();
+        outputChannel.info(
+          `Response: ${req.method} ${req.path} - ${fullResponse}`,
+        );
+        logged = true;
+      }
+      return originalEnd(chunk, encoding, callback);
+    };
+  }
+
   private getServer() {
     const server = new McpServer({
       name: "vscode-ask-human-mcp",
@@ -132,6 +172,8 @@ export class HumanMCPServer {
         const transport = new StreamableHTTPServerTransport({
           sessionIdGenerator: undefined,
         });
+
+        this.setupResponseLogging(req, res);
 
         res.on("close", () => {
           transport.close();
