@@ -5,6 +5,7 @@ import express from "express";
 import { Server } from "http";
 import * as vscode from "vscode";
 import { z } from "zod";
+import packageJson from "../package.json";
 
 interface Extension {
   askHuman(question: string): Promise<string>;
@@ -79,7 +80,7 @@ export class HumanMCPServer {
   private getServer() {
     const server = new McpServer({
       name: "vscode-ask-human-mcp",
-      version: "1.0.0",
+      version: packageJson.version,
     });
 
     server.registerTool(
@@ -199,7 +200,7 @@ export class HumanMCPServer {
     this.expressApp.get("/", (_req, res) => {
       res.json({
         name: "VS Code Ask Human MCP Server",
-        version: "1.0.0",
+        version: packageJson.version,
         status: "running",
         endpoint: "/mcp",
         instanceId: this.instanceId,
