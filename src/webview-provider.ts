@@ -9,7 +9,7 @@ export class QuestionWebviewProvider {
     private extension: VSCodeExtension,
   ) {}
 
-  private createPanel() {
+  public createOrShowPanel() {
     if (this._panel) {
       this._panel.reveal(vscode.ViewColumn.Two);
       return;
@@ -52,7 +52,7 @@ export class QuestionWebviewProvider {
   }
 
   public updateQuestions(questions: Array<{ id: string; question: string }>) {
-    this.createPanel();
+    this.createOrShowPanel();
 
     if (this._panel) {
       this._panel.webview.postMessage({

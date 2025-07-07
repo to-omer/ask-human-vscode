@@ -51,6 +51,9 @@ export class VSCodeExtension {
       vscode.commands.registerCommand("askHumanVscode.toggleMCPServer", () => {
         this.toggleMCPServer();
       }),
+      vscode.commands.registerCommand("askHumanVscode.showPanel", () => {
+        this.webviewProvider.updateQuestions(this.getQuestions());
+      }),
     );
 
     context.subscriptions.push(this.statusBarItem);

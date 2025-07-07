@@ -27,6 +27,11 @@
       {
         "command": "askHumanVscode.toggleMCPServer",
         "title": "Toggle MCP Server"
+      },
+      {
+        "command": "askHumanVscode.showPanel",
+        "title": "Show Panel",
+        "category": "Ask Human"
       }
     ],
     "configuration": {
