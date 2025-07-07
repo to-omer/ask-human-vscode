@@ -5,6 +5,7 @@ import express from "express";
 import { Server } from "http";
 import * as vscode from "vscode";
 import { z } from "zod";
+import packageJson from "../package.json";
 
 interface Extension {
   askHuman(question: string): Promise<string>;
@@ -26,19 +27,69 @@ export class HumanMCPServer {
     this.port = port;
   }
 
+  private getToolDescription(): string {
+    const config = vscode.workspace.getConfiguration("askHumanVscode");
+    return config.get<string>("toolDescription")!;
+  }
+
+  private getQuestionDescription(): string {
+    const config = vscode.workspace.getConfiguration("askHumanVscode");
+    return config.get<string>("questionDescription")!;
+  }
+
+  private setupResponseLogging(
+    req: express.Request,
+    res: express.Response,
+  ): void {
+    const responseChunks: Buffer[] = [];
+    const outputChannel = this.outputChannel;
+    let logged = false;
+
+    const addChunk = (chunk: any) => {
+      if (typeof chunk === "string") {
+        responseChunks.push(Buffer.from(chunk));
+      } else if (Buffer.isBuffer(chunk)) {
+        responseChunks.push(chunk);
+      }
+    };
+
+    const originalWrite = res.write.bind(res);
+    res.write = function (chunk: any, encoding?: any, callback?: any) {
+      addChunk(chunk);
+      return originalWrite(chunk, encoding, callback);
+    };
+
+    const originalEnd = res.end.bind(res);
+    res.end = function (chunk?: any, encoding?: any, callback?: any) {
+      if (chunk) {
+        addChunk(chunk);
+      }
+      if (!logged) {
+        const fullResponse = Buffer.concat(responseChunks)
+          .toString("utf-8")
+          .trim();
+        outputChannel.info(
+          `Response: ${req.method} ${req.path} - ${fullResponse}`,
+        );
+        logged = true;
+      }
+      return originalEnd(chunk, encoding, callback);
+    };
+  }
+
   private getServer() {
     const server = new McpServer({
       name: "vscode-ask-human-mcp",
-      version: "1.0.0",
+      version: packageJson.version,
     });
 
     server.registerTool(
       "ask-human-vscode",
       {
         title: "Ask Human in VS Code",
-        description: "Ask a question to the developer in VS Code",
+        description: this.getToolDescription(),
         inputSchema: {
-          question: z.string().describe("Question to ask the developer"),
+          question: z.string().describe(this.getQuestionDescription()),
         },
       },
       async ({ question }) => {
@@ -123,6 +174,8 @@ export class HumanMCPServer {
           sessionIdGenerator: undefined,
         });
 
+        this.setupResponseLogging(req, res);
+
         res.on("close", () => {
           transport.close();
           server.close();
@@ -147,7 +200,7 @@ export class HumanMCPServer {
     this.expressApp.get("/", (_req, res) => {
       res.json({
         name: "VS Code Ask Human MCP Server",
-        version: "1.0.0",
+        version: packageJson.version,
         status: "running",
         endpoint: "/mcp",
         instanceId: this.instanceId,
