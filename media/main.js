@@ -2,13 +2,23 @@ const vscode = acquireVsCodeApi();
 let currentQuestionId = null;
 let questions = [];
 
+function stripHtml(html) {
+  const div = document.createElement("div");
+  div.innerHTML = html;
+  return div.textContent || div.innerText || "";
+}
+
 function updateQuestionDisplay() {
   const questionText = document.getElementById("question-text");
   const selectedQuestion = questions.find((q) => q.id === currentQuestionId);
 
   if (selectedQuestion) {
-    questionText.textContent = selectedQuestion.question;
+    questionText.innerHTML = selectedQuestion.question;
     questionText.style.display = "block";
+
+    if (typeof Prism !== "undefined") {
+      Prism.highlightAllUnder(questionText);
+    }
   } else {
     questionText.style.display = "none";
   }
@@ -36,7 +46,8 @@ function updateQuestionSelector() {
     if (q.id !== currentQuestionId) {
       const option = document.createElement("div");
       option.className = "question-option";
-      option.textContent = `${q.question.substring(0, 60)}${q.question.length > 60 ? "..." : ""}`;
+      const plainText = stripHtml(q.question);
+      option.textContent = `${plainText.substring(0, 60)}${plainText.length > 60 ? "..." : ""}`;
       option.addEventListener("click", () => {
         selectQuestion(q.id);
         toggleDropdown(false);

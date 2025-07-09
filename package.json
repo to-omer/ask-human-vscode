@@ -77,19 +77,24 @@
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.15.0",
-    "zod": "^3.23.0",
-    "express": "^5.1.0"
+    "express": "^5.1.0",
+    "marked": "^16.0.0",
+    "prismjs": "^1.30.0",
+    "sanitize-html": "^2.17.0",
+    "zod": "^3.23.0"
   },
   "devDependencies": {
-    "@types/vscode": "^1.74.0",
+    "@types/express": "^5.0.3",
     "@types/mocha": "^10.0.10",
     "@types/node": "20.x",
-    "@types/express": "^5.0.3",
+    "@types/sanitize-html": "^2.16.0",
+    "@types/trusted-types": "^2.0.7",
+    "@types/vscode": "^1.74.0",
     "@typescript-eslint/eslint-plugin": "^8.31.1",
     "@typescript-eslint/parser": "^8.31.1",
-    "eslint": "^9.25.1",
-    "typescript": "^5.8.3",
     "@vscode/test-cli": "^0.0.10",
-    "@vscode/test-electron": "^2.5.2"
+    "@vscode/test-electron": "^2.5.2",
+    "eslint": "^9.25.1",
+    "typescript": "^5.8.3"
   }
 }

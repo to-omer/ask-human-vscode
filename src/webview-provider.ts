@@ -79,6 +79,12 @@ export class QuestionWebviewProvider {
       const stylesUri = webview.asWebviewUri(
         vscode.Uri.joinPath(this.context.extensionUri, "media", "styles.css"),
       );
+      const prismCssUri = webview.asWebviewUri(
+        vscode.Uri.joinPath(this.context.extensionUri, "media", "prism.css"),
+      );
+      const prismJsUri = webview.asWebviewUri(
+        vscode.Uri.joinPath(this.context.extensionUri, "media", "prism.js"),
+      );
       const scriptUri = webview.asWebviewUri(
         vscode.Uri.joinPath(this.context.extensionUri, "media", "main.js"),
       );
@@ -92,6 +98,7 @@ export class QuestionWebviewProvider {
   <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src ${webview.cspSource}; script-src 'nonce-${nonce}';">
   <title>Ask Human</title>
   <link href="${stylesUri}" rel="stylesheet">
+  <link href="${prismCssUri}" rel="stylesheet">
 </head>
 <body>
   <div class="container">
@@ -124,6 +131,7 @@ export class QuestionWebviewProvider {
     </div>
   </div>
 
+  <script nonce="${nonce}" src="${prismJsUri}" data-manual></script>
   <script nonce="${nonce}" src="${scriptUri}"></script>
 </body>
 </html>`;

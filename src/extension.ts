@@ -3,6 +3,7 @@ import * as vscode from "vscode";
 import { z } from "zod";
 import { HumanMCPServer } from "./mcp-server";
 import { QuestionWebviewProvider } from "./webview-provider";
+import { MarkdownProcessor } from "./markdown-processor";
 
 const MCPServerResponseSchema = z.object({
   name: z.literal("VS Code Ask Human MCP Server"),
@@ -15,6 +16,7 @@ const MCPServerResponseSchema = z.object({
 export class VSCodeExtension {
   private webviewProvider: QuestionWebviewProvider;
   private mcpServer: HumanMCPServer;
+  private markdownProcessor: MarkdownProcessor;
   private questions: Map<
     string,
     {
@@ -30,6 +32,7 @@ export class VSCodeExtension {
     this.outputChannel = vscode.window.createOutputChannel("Ask Human MCP", {
       log: true,
     });
+    this.markdownProcessor = new MarkdownProcessor();
     this.webviewProvider = new QuestionWebviewProvider(context, this);
 
     const config = vscode.workspace.getConfiguration("askHumanVscode");
@@ -155,7 +158,9 @@ export class VSCodeExtension {
     this.outputChannel.info(`Question received: ${question}`);
     return new Promise((resolve) => {
       const questionId = randomUUID();
-      this.questions.set(questionId, { question, resolve });
+      const processedQuestion =
+        this.markdownProcessor.processMarkdown(question);
+      this.questions.set(questionId, { question: processedQuestion, resolve });
 
       this.webviewProvider.updateQuestions(this.getQuestions());
     });
