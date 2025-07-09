@@ -28,6 +28,7 @@ body {
 
 .question-text {
   margin: 0 0 20px 0;
+  position: relative;
   white-space: normal;
   font-size: 13px;
   line-height: 1.6;
@@ -428,4 +429,32 @@ body {
 .question-text li input[type="checkbox"] {
   position: relative;
   top: 1px;
+}
+
+.copy-button {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  background: transparent;
+  border: none;
+  color: var(--vscode-foreground);
+  opacity: 0.7;
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 3px;
+  transition: all 0.2s ease;
+}
+
+.copy-button:hover {
+  opacity: 1;
+  background: var(--vscode-toolbar-hoverBackground);
+}
+
+.copy-button:focus {
+  outline: 1px solid var(--vscode-focusBorder);
+  outline-offset: -1px;
+}
+
+.copy-button .codicon {
+  font-size: 16px;
 }

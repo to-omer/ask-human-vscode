@@ -51,7 +51,13 @@ export class QuestionWebviewProvider {
     this.updateHTML();
   }
 
-  public updateQuestions(questions: Array<{ id: string; question: string }>) {
+  public updateQuestions(
+    questions: Array<{
+      id: string;
+      question: string;
+      processedQuestion: string;
+    }>,
+  ) {
     this.createOrShowPanel();
 
     if (this._panel) {
@@ -88,6 +94,15 @@ export class QuestionWebviewProvider {
       const scriptUri = webview.asWebviewUri(
         vscode.Uri.joinPath(this.context.extensionUri, "media", "main.js"),
       );
+      const codiconsUri = webview.asWebviewUri(
+        vscode.Uri.joinPath(
+          this.context.extensionUri,
+          "node_modules",
+          "@vscode/codicons",
+          "dist",
+          "codicon.css",
+        ),
+      );
 
       this._panel.webview.html = `
 <!DOCTYPE html>
@@ -95,10 +110,11 @@ export class QuestionWebviewProvider {
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src ${webview.cspSource}; script-src 'nonce-${nonce}';">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src ${webview.cspSource}; font-src ${webview.cspSource}; script-src 'nonce-${nonce}';">
   <title>Ask Human</title>
   <link href="${stylesUri}" rel="stylesheet">
   <link href="${prismCssUri}" rel="stylesheet">
+  <link href="${codiconsUri}" rel="stylesheet">
 </head>
 <body>
   <div class="container">
@@ -117,7 +133,12 @@ export class QuestionWebviewProvider {
           </div>
         </div>
 
-        <div id="question-text" class="question-text"></div>
+        <div id="question-text" class="question-text">
+          <button id="copy-button" class="copy-button"
+                  title="質問をコピー" aria-label="質問をクリップボードにコピー">
+            <i class="codicon codicon-copy"></i>
+          </button>
+        </div>
 
         <div class="form-group">
           <textarea id="answer-textarea" class="answer-textarea" placeholder="Type your answer here..."></textarea>

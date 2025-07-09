@@ -20,7 +20,8 @@ export class VSCodeExtension {
   private questions: Map<
     string,
     {
-      question: string;
+      originalQuestion: string;
+      processedQuestion: string;
       resolve: (answer: string) => void;
     }
   > = new Map();
@@ -147,10 +148,15 @@ export class VSCodeExtension {
     this.statusBarItem.show();
   }
 
-  public getQuestions(): Array<{ id: string; question: string }> {
+  public getQuestions(): Array<{
+    id: string;
+    question: string;
+    processedQuestion: string;
+  }> {
     return Array.from(this.questions.entries()).map(([id, data]) => ({
       id,
-      question: data.question,
+      question: data.originalQuestion,
+      processedQuestion: data.processedQuestion,
     }));
   }
 
@@ -160,7 +166,11 @@ export class VSCodeExtension {
       const questionId = randomUUID();
       const processedQuestion =
         this.markdownProcessor.processMarkdown(question);
-      this.questions.set(questionId, { question: processedQuestion, resolve });
+      this.questions.set(questionId, {
+        originalQuestion: question,
+        processedQuestion: processedQuestion,
+        resolve,
+      });
 
       this.webviewProvider.updateQuestions(this.getQuestions());
     });

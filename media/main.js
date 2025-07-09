@@ -13,7 +13,13 @@ function updateQuestionDisplay() {
   const selectedQuestion = questions.find((q) => q.id === currentQuestionId);
 
   if (selectedQuestion) {
-    questionText.innerHTML = selectedQuestion.question;
+    const copyButton = questionText.querySelector("#copy-button");
+    questionText.innerHTML = selectedQuestion.processedQuestion;
+
+    if (copyButton) {
+      questionText.appendChild(copyButton);
+    }
+
     questionText.style.display = "block";
 
     if (typeof Prism !== "undefined") {
@@ -46,7 +52,7 @@ function updateQuestionSelector() {
     if (q.id !== currentQuestionId) {
       const option = document.createElement("div");
       option.className = "question-option";
-      const plainText = stripHtml(q.question);
+      const plainText = stripHtml(q.processedQuestion);
       option.textContent = `${plainText.substring(0, 60)}${plainText.length > 60 ? "..." : ""}`;
       option.addEventListener("click", () => {
         selectQuestion(q.id);
@@ -120,3 +126,31 @@ document.getElementById("answer-textarea").addEventListener("keydown", (e) => {
     sendAnswer();
   }
 });
+
+function copyCurrentQuestion() {
+  const selectedQuestion = questions.find((q) => q.id === currentQuestionId);
+  if (!selectedQuestion) {
+    return;
+  }
+
+  const copyButton = document.getElementById("copy-button");
+  const copyIcon = copyButton.querySelector(".codicon");
+
+  navigator.clipboard
+    .writeText(selectedQuestion.question)
+    .then(() => {
+      copyIcon.className = "codicon codicon-check";
+      setTimeout(() => {
+        copyIcon.className = "codicon codicon-copy";
+      }, 1000);
+    })
+    .catch(() => {
+      copyIcon.className = "codicon codicon-warning";
+      setTimeout(() => {
+        copyIcon.className = "codicon codicon-copy";
+      }, 1000);
+    });
+}
+document
+  .getElementById("copy-button")
+  .addEventListener("click", copyCurrentQuestion);
