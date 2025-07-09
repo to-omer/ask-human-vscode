@@ -2,6 +2,13 @@
 
 All notable changes to the "ask-human-vscode" extension will be documented in this file.
 
+## [1.2.0] - 2025-07-10
+
+### Added
+
+- Copy button to copy questions to clipboard
+- Rich markdown support with syntax highlighting
+
 ## [1.1.0] - 2025-07-08
 
 ### Added
