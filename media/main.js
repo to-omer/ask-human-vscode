@@ -2,13 +2,29 @@ const vscode = acquireVsCodeApi();
 let currentQuestionId = null;
 let questions = [];
 
+function stripHtml(html) {
+  const div = document.createElement("div");
+  div.innerHTML = html;
+  return div.textContent || div.innerText || "";
+}
+
 function updateQuestionDisplay() {
   const questionText = document.getElementById("question-text");
   const selectedQuestion = questions.find((q) => q.id === currentQuestionId);
 
   if (selectedQuestion) {
-    questionText.textContent = selectedQuestion.question;
+    const copyButton = questionText.querySelector("#copy-button");
+    questionText.innerHTML = selectedQuestion.processedQuestion;
+
+    if (copyButton) {
+      questionText.appendChild(copyButton);
+    }
+
     questionText.style.display = "block";
+
+    if (typeof Prism !== "undefined") {
+      Prism.highlightAllUnder(questionText);
+    }
   } else {
     questionText.style.display = "none";
   }
@@ -36,7 +52,8 @@ function updateQuestionSelector() {
     if (q.id !== currentQuestionId) {
       const option = document.createElement("div");
       option.className = "question-option";
-      option.textContent = `${q.question.substring(0, 60)}${q.question.length > 60 ? "..." : ""}`;
+      const plainText = stripHtml(q.processedQuestion);
+      option.textContent = `${plainText.substring(0, 60)}${plainText.length > 60 ? "..." : ""}`;
       option.addEventListener("click", () => {
         selectQuestion(q.id);
         toggleDropdown(false);
@@ -109,3 +126,31 @@ document.getElementById("answer-textarea").addEventListener("keydown", (e) => {
     sendAnswer();
   }
 });
+
+function copyCurrentQuestion() {
+  const selectedQuestion = questions.find((q) => q.id === currentQuestionId);
+  if (!selectedQuestion) {
+    return;
+  }
+
+  const copyButton = document.getElementById("copy-button");
+  const copyIcon = copyButton.querySelector(".codicon");
+
+  navigator.clipboard
+    .writeText(selectedQuestion.question)
+    .then(() => {
+      copyIcon.className = "codicon codicon-check";
+      setTimeout(() => {
+        copyIcon.className = "codicon codicon-copy";
+      }, 1000);
+    })
+    .catch(() => {
+      copyIcon.className = "codicon codicon-warning";
+      setTimeout(() => {
+        copyIcon.className = "codicon codicon-copy";
+      }, 1000);
+    });
+}
+document
+  .getElementById("copy-button")
+  .addEventListener("click", copyCurrentQuestion);
