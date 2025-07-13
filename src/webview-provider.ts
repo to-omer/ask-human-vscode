@@ -147,7 +147,9 @@ export class QuestionWebviewProvider implements vscode.WebviewViewProvider {
   private async onWebviewPositionChanged(): Promise<void> {
     this.hideCurrentWebView();
 
-    this.updateQuestions(this._currentQuestions);
+    if (this._currentQuestions.length > 0) {
+      this.updateQuestions(this._currentQuestions);
+    }
   }
 
   private hideCurrentWebView(): void {
