@@ -191,7 +191,11 @@ export class VSCodeExtension {
       this.questions.delete(questionId);
 
       this.webviewProvider.updateQuestions(this.getQuestions());
-      this.webviewProvider.closeEditor();
+
+      if (this.questions.size === 0) {
+        this.webviewProvider.closeEditor();
+      }
+
       this.updateStatusBar();
     }
   }
