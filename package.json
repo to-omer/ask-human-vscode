@@ -32,6 +32,12 @@
         "command": "askHumanVscode.showPanel",
         "title": "Show Panel",
         "category": "Ask Human"
+      },
+      {
+        "command": "askHumanVscode.selectQuestion",
+        "title": "Select Question",
+        "category": "Ask Human",
+        "icon": "$(question)"
       }
     ],
     "viewsContainers": {
@@ -51,6 +57,26 @@
           "type": "webview",
           "icon": "resources/icon-light.svg",
           "when": "config.askHumanVscode.webviewPosition == 'extension'"
+        }
+      ]
+    },
+    "menus": {
+      "editor/title": [
+        {
+          "command": "askHumanVscode.selectQuestion",
+          "when": "config.askHumanVscode.webviewPosition == 'editor' && askHumanVscode.hasQuestions",
+          "group": "navigation",
+          "title": "Select Question",
+          "icon": "$(question)"
+        }
+      ],
+      "view/title": [
+        {
+          "command": "askHumanVscode.selectQuestion",
+          "when": "view == 'askHumanVscode.extensionView' && askHumanVscode.hasQuestions",
+          "group": "navigation",
+          "title": "Select Question",
+          "icon": "$(question)"
         }
       ]
     },

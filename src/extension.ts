@@ -58,6 +58,9 @@ export class VSCodeExtension {
       vscode.commands.registerCommand("askHumanVscode.showPanel", () => {
         this.webviewProvider.updateQuestions(this.getQuestions());
       }),
+      vscode.commands.registerCommand("askHumanVscode.selectQuestion", () => {
+        this.showQuestionPicker();
+      }),
     );
 
     context.subscriptions.push(this.statusBarItem);
@@ -180,6 +183,7 @@ export class VSCodeExtension {
 
       this.webviewProvider.updateQuestions(this.getQuestions());
       this.updateStatusBar();
+      this.updateContexts();
     });
   }
 
@@ -191,6 +195,7 @@ export class VSCodeExtension {
       this.questions.delete(questionId);
 
       this.webviewProvider.updateQuestions(this.getQuestions());
+      this.updateContexts();
 
       if (this.questions.size === 0) {
         this.webviewProvider.closeEditor();
@@ -212,6 +217,41 @@ export class VSCodeExtension {
 
     this.webviewProvider.dispose();
     this.statusBarItem.hide();
+  }
+
+  private async showQuestionPicker(): Promise<void> {
+    const questions = Array.from(this.questions.entries());
+
+    if (questions.length === 0) {
+      vscode.window.showInformationMessage("No questions available");
+      return;
+    }
+
+    const items = questions.map(([id, q]) => ({
+      id,
+      label: q.originalQuestion,
+    }));
+
+    await vscode.window.showQuickPick(items, {
+      title: "Select Question",
+      placeHolder: "Choose a question to focus on",
+      onDidSelectItem: (item: any) => {
+        // Send selected question to WebView
+        this.webviewProvider.postMessage({
+          type: "selectQuestion",
+          questionId: item.id,
+        });
+      },
+    });
+  }
+
+  private updateContexts(): void {
+    const hasQuestions = this.questions.size > 0;
+    vscode.commands.executeCommand(
+      "setContext",
+      "askHumanVscode.hasQuestions",
+      hasQuestions,
+    );
   }
 }
 

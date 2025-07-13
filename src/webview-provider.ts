@@ -312,14 +312,6 @@ export class QuestionWebviewProvider implements vscode.WebviewViewProvider {
 
     <div id="question-container" class="question-panel">
       <div class="question-content">
-        <div class="question-selector" id="question-selector">
-          <button class="question-selector-button" id="question-selector-button">
-            <span class="add-icon"></span>
-          </button>
-          <div class="question-dropdown" id="question-dropdown">
-          </div>
-        </div>
-
         <div id="question-text" class="question-text">
           <button id="copy-button" class="copy-button"
                   title="Copy question" aria-label="Copy question to clipboard">
@@ -343,6 +335,16 @@ export class QuestionWebviewProvider implements vscode.WebviewViewProvider {
   <script nonce="${nonce}" src="${scriptUri}"></script>
 </body>
 </html>`;
+  }
+
+  public postMessage(message: any): void {
+    if (this._panel) {
+      this._panel.webview.postMessage(message);
+    }
+
+    if (this._extensionView) {
+      this._extensionView.webview.postMessage(message);
+    }
   }
 
   private getNonce() {

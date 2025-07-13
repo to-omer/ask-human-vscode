@@ -52,44 +52,6 @@ function updateQuestionDisplay() {
 function selectQuestion(questionId) {
   currentQuestionId = questionId;
   updateQuestionDisplay();
-  updateQuestionSelector();
-}
-
-function updateQuestionSelector() {
-  const selector = document.getElementById("question-selector");
-  const dropdown = document.getElementById("question-dropdown");
-
-  if (questions.length <= 1) {
-    selector.classList.remove("show");
-    return;
-  }
-
-  selector.classList.add("show");
-  dropdown.innerHTML = "";
-
-  questions.forEach((q) => {
-    if (q.id !== currentQuestionId) {
-      const option = document.createElement("div");
-      option.className = "question-option";
-      const plainText = stripHtml(q.processedQuestion);
-      option.textContent = `${plainText.substring(0, 60)}${plainText.length > 60 ? "..." : ""}`;
-      option.addEventListener("click", () => {
-        selectQuestion(q.id);
-        toggleDropdown(false);
-      });
-      dropdown.appendChild(option);
-    }
-  });
-}
-
-function toggleDropdown(show) {
-  const dropdown = document.getElementById("question-dropdown");
-
-  if (show === undefined) {
-    show = dropdown.style.display === "none";
-  }
-
-  dropdown.style.display = show ? "block" : "none";
 }
 
 function sendAnswer() {
@@ -121,24 +83,14 @@ window.addEventListener("message", (event) => {
       document.getElementById("question-container").style.display = "none";
       document.getElementById("no-question").style.display = "block";
     }
+  } else if (message.type === "selectQuestion") {
+    // NEW: Handle question selection from toolbar
+    selectQuestion(message.questionId);
   } else if (message.type === "restoreAnswerText") {
     const textarea = document.getElementById("answer-textarea");
     if (textarea) {
       textarea.value = message.answerText || "";
     }
-  }
-});
-
-document
-  .getElementById("question-selector-button")
-  .addEventListener("click", () => {
-    toggleDropdown();
-  });
-
-document.addEventListener("click", (e) => {
-  const selector = document.getElementById("question-selector");
-  if (!selector.contains(e.target)) {
-    toggleDropdown(false);
   }
 });
 
