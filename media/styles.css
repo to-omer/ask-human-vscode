@@ -13,6 +13,22 @@ body {
   padding: 16px;
 }
 
+.layout-sidebar .container {
+  max-width: none;
+  padding: 8px;
+}
+
+.layout-panel .container {
+  max-width: none;
+  padding: 12px;
+}
+
+.layout-editor .container {
+  max-width: 800px;
+  margin: 0 auto;
+  padding: 16px;
+}
+
 .question-panel {
   display: none;
   background-color: var(--vscode-panel-background);
@@ -24,6 +40,61 @@ body {
 
 .question-content {
   padding: 20px;
+}
+
+.layout-sidebar .question-content {
+  padding: 12px;
+}
+
+.layout-panel .question-content {
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.layout-panel .form-group {
+  flex: 1;
+}
+
+.layout-panel .answer-textarea {
+  min-height: 60px;
+}
+
+.layout-sidebar .question-text {
+  margin: 0 0 12px 0;
+  font-size: 13px;
+}
+
+.layout-sidebar .question-text h1,
+.layout-sidebar .question-text h2,
+.layout-sidebar .question-text h3 {
+  font-size: 14px;
+  margin: 8px 0 4px 0;
+}
+
+.layout-sidebar .question-text p {
+  margin: 4px 0;
+  font-size: 12px;
+}
+
+.layout-sidebar .question-text code {
+  font-size: 11px;
+  padding: 1px 3px;
+}
+
+.layout-sidebar .answer-textarea {
+  min-height: 80px;
+  font-size: 12px;
+}
+
+.layout-sidebar .send-button {
+  font-size: 12px;
+  padding: 4px 8px;
+}
+
+.layout-sidebar .keyboard-hint {
+  font-size: 10px;
 }
 
 .question-text {
@@ -208,6 +279,22 @@ body {
   padding: 40px 16px;
 }
 
+.layout-sidebar .no-question {
+  margin-top: 40px;
+  padding: 20px 10px;
+  font-size: 12px;
+}
+
+.layout-sidebar .no-question-icon {
+  font-size: 24px;
+  margin-bottom: 8px;
+}
+
+.layout-panel .no-question {
+  margin-top: 20px;
+  padding: 20px;
+}
+
 .no-question-icon {
   font-size: 32px;
   margin-bottom: 12px;
@@ -321,7 +408,6 @@ body {
   margin: 12px 0;
 }
 
-/* PrismJSシンタックスハイライト */
 .question-text .token.comment,
 .question-text .token.prolog,
 .question-text .token.doctype,
@@ -457,4 +543,14 @@ body {
 
 .copy-button .codicon {
   font-size: 16px;
+}
+
+.question-text a[data-file-uri],
+.question-text code[data-file-uri] {
+  cursor: pointer;
+}
+
+.question-text a[data-file-uri]:hover,
+.question-text code[data-file-uri]:hover {
+  text-decoration: underline;
 }

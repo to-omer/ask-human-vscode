@@ -34,6 +34,26 @@
         "category": "Ask Human"
       }
     ],
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "askHumanVscode",
+          "title": "Ask Human",
+          "icon": "resources/icon-light.svg"
+        }
+      ]
+    },
+    "views": {
+      "askHumanVscode": [
+        {
+          "id": "askHumanVscode.extensionView",
+          "name": "Questions",
+          "type": "webview",
+          "icon": "resources/icon-light.svg",
+          "when": "config.askHumanVscode.webviewPosition == 'extension'"
+        }
+      ]
+    },
     "configuration": {
       "title": "Ask Human VS Code",
       "properties": {
@@ -63,6 +83,15 @@
             "Question including relevant code, attempted approaches, and expected outcome",
             "Question with background information, options considered, and decision criteria"
           ]
+        },
+        "askHumanVscode.webviewPosition": {
+          "type": "string",
+          "enum": [
+            "extension",
+            "editor"
+          ],
+          "default": "editor",
+          "description": "Select position to display Ask Human WebView"
         }
       }
     }

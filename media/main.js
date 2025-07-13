@@ -20,6 +20,25 @@ function updateQuestionDisplay() {
       questionText.appendChild(copyButton);
     }
 
+    questionText
+      .querySelectorAll("a[data-file-uri], code[data-file-uri]")
+      .forEach((element) => {
+        element.addEventListener("click", (event) => {
+          event.preventDefault();
+          const fileUri = element.getAttribute("data-file-uri");
+          const startLine = element.getAttribute("data-start-line");
+          const endLine = element.getAttribute("data-end-line");
+          if (fileUri) {
+            vscode.postMessage({
+              type: "openFile",
+              fileUri: fileUri,
+              startLine: startLine ? parseInt(startLine, 10) : undefined,
+              endLine: endLine ? parseInt(endLine, 10) : undefined,
+            });
+          }
+        });
+      });
+
     questionText.style.display = "block";
 
     if (typeof Prism !== "undefined") {
@@ -102,6 +121,11 @@ window.addEventListener("message", (event) => {
       document.getElementById("question-container").style.display = "none";
       document.getElementById("no-question").style.display = "block";
     }
+  } else if (message.type === "restoreAnswerText") {
+    const textarea = document.getElementById("answer-textarea");
+    if (textarea) {
+      textarea.value = message.answerText || "";
+    }
   }
 });
 
@@ -126,6 +150,16 @@ document.getElementById("answer-textarea").addEventListener("keydown", (e) => {
     sendAnswer();
   }
 });
+
+document
+  .getElementById("answer-textarea")
+  .addEventListener("input", (event) => {
+    const answerText = event.target.value || "";
+    vscode.postMessage({
+      type: "updateAnswerText",
+      answerText: answerText,
+    });
+  });
 
 function copyCurrentQuestion() {
   const selectedQuestion = questions.find((q) => q.id === currentQuestionId);

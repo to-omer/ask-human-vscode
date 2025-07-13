@@ -1,13 +1,39 @@
 import * as vscode from "vscode";
 import { VSCodeExtension } from "./extension";
 
-export class QuestionWebviewProvider {
+export class QuestionWebviewProvider implements vscode.WebviewViewProvider {
   private _panel?: vscode.WebviewPanel;
+  private _extensionView?: vscode.WebviewView;
+  private _currentQuestions: Array<{
+    id: string;
+    question: string;
+    processedQuestion: string;
+  }> = [];
+  private _currentAnswerText: string = "";
+  private _disposables: vscode.Disposable[] = [];
+  private _isDisposed = false;
 
   constructor(
     private context: vscode.ExtensionContext,
     private extension: VSCodeExtension,
-  ) {}
+  ) {
+    this._disposables.push(
+      vscode.window.registerWebviewViewProvider(
+        "askHumanVscode.extensionView",
+        this,
+      ),
+    );
+
+    this._disposables.push(
+      vscode.workspace.onDidChangeConfiguration((event) => {
+        if (event.affectsConfiguration("askHumanVscode.webviewPosition")) {
+          this.onWebviewPositionChanged();
+        }
+      }),
+    );
+
+    context.subscriptions.push(...this._disposables);
+  }
 
   public createOrShowPanel() {
     if (this._panel) {
@@ -38,17 +64,47 @@ export class QuestionWebviewProvider {
       ),
     };
 
-    this._panel.webview.onDidReceiveMessage((message) => {
-      if (message.type === "answer") {
-        this.extension.sendAnswer(message.answer, message.questionId);
-      }
-    });
-
     this._panel.onDidDispose(() => {
       this._panel = undefined;
     });
 
-    this.updateHTML();
+    this.setupWebview(this._panel.webview, "editor");
+  }
+
+  public resolveWebviewView(
+    webviewView: vscode.WebviewView,
+    _context: vscode.WebviewViewResolveContext,
+    _token: vscode.CancellationToken,
+  ): void {
+    if (webviewView.viewType === "askHumanVscode.extensionView") {
+      this._extensionView = webviewView;
+    }
+
+    this.setupWebview(webviewView.webview, webviewView.viewType);
+
+    this.sendStateToWebview(webviewView.webview);
+
+    const visibilityDisposable = webviewView.onDidChangeVisibility(() => {
+      if (webviewView.visible) {
+        this.sendStateToWebview(webviewView.webview);
+      }
+    });
+
+    this._disposables.push(visibilityDisposable);
+  }
+
+  private sendStateToWebview(webview: vscode.Webview) {
+    webview.postMessage({
+      type: "questions",
+      questions: this._currentQuestions,
+    });
+
+    if (this._currentAnswerText) {
+      webview.postMessage({
+        type: "restoreAnswerText",
+        answerText: this._currentAnswerText,
+      });
+    }
   }
 
   public updateQuestions(
@@ -58,53 +114,188 @@ export class QuestionWebviewProvider {
       processedQuestion: string;
     }>,
   ) {
-    this.createOrShowPanel();
+    this._currentQuestions = questions;
 
-    if (this._panel) {
-      this._panel.webview.postMessage({
-        type: "questions",
-        questions,
-      });
-      this._panel.reveal(vscode.ViewColumn.Two);
+    const position = this.getWebviewPosition();
+
+    if (position === "editor") {
+      this.createOrShowPanel();
+      if (this._panel) {
+        this.sendStateToWebview(this._panel.webview);
+      }
+    } else if (position === "extension") {
+      if (this._extensionView) {
+        this.sendStateToWebview(this._extensionView.webview);
+        this._extensionView.show();
+      }
     }
   }
 
-  public dispose() {
+  private getWebviewPosition(): string {
+    return vscode.workspace
+      .getConfiguration("askHumanVscode")
+      .get("webviewPosition", "editor");
+  }
+
+  private async onWebviewPositionChanged(): Promise<void> {
+    this.hideCurrentWebView();
+
+    this.updateQuestions(this._currentQuestions);
+  }
+
+  private hideCurrentWebView(): void {
     if (this._panel) {
       this._panel.dispose();
       this._panel = undefined;
     }
+    this._extensionView = undefined;
   }
 
-  private updateHTML() {
+  private async handleOpenFile(message: {
+    fileUri: string;
+    startLine?: number;
+    endLine?: number;
+  }) {
+    try {
+      const uri = vscode.Uri.parse(message.fileUri);
+      const document = await vscode.workspace.openTextDocument(uri);
+
+      const isFileOpen = vscode.workspace.textDocuments.some(
+        (doc) => doc.uri.fsPath === uri.fsPath,
+      );
+
+      const selection = message.startLine
+        ? new vscode.Range(
+            new vscode.Position(message.startLine - 1, 0),
+            message.endLine
+              ? new vscode.Position(message.endLine - 1, Number.MAX_VALUE)
+              : new vscode.Position(message.startLine - 1, 0),
+          )
+        : undefined;
+
+      if (isFileOpen) {
+        await vscode.window.showTextDocument(document, {
+          preserveFocus: false,
+          preview: false,
+          selection,
+        });
+      } else {
+        const targetViewColumn = this.determineTargetViewColumn();
+
+        await vscode.window.showTextDocument(document, {
+          viewColumn: targetViewColumn,
+          preserveFocus: false,
+          preview: false,
+          selection,
+        });
+      }
+    } catch (error) {
+      vscode.window.showErrorMessage(`Failed to open file: ${message.fileUri}`);
+    }
+  }
+
+  private determineTargetViewColumn(): vscode.ViewColumn {
+    const position = this.getWebviewPosition();
+
+    if (position === "extension") {
+      return vscode.ViewColumn.One;
+    } else {
+      return this._panel?.viewColumn === vscode.ViewColumn.Two
+        ? vscode.ViewColumn.One
+        : vscode.ViewColumn.Two;
+    }
+  }
+
+  public dispose() {
+    if (this._isDisposed) {
+      return;
+    }
+
+    this._isDisposed = true;
+
+    this._disposables.forEach((disposable) => disposable.dispose());
+    this._disposables = [];
+
     if (this._panel) {
-      const webview = this._panel.webview;
+      this._panel.dispose();
+      this._panel = undefined;
+    }
 
-      const nonce = this.getNonce();
+    this._extensionView = undefined;
+    this._currentQuestions = [];
+    this._currentAnswerText = "";
+  }
 
-      const stylesUri = webview.asWebviewUri(
-        vscode.Uri.joinPath(this.context.extensionUri, "media", "styles.css"),
-      );
-      const prismCssUri = webview.asWebviewUri(
-        vscode.Uri.joinPath(this.context.extensionUri, "media", "prism.css"),
-      );
-      const prismJsUri = webview.asWebviewUri(
-        vscode.Uri.joinPath(this.context.extensionUri, "media", "prism.js"),
-      );
-      const scriptUri = webview.asWebviewUri(
-        vscode.Uri.joinPath(this.context.extensionUri, "media", "main.js"),
-      );
-      const codiconsUri = webview.asWebviewUri(
-        vscode.Uri.joinPath(
-          this.context.extensionUri,
-          "node_modules",
-          "@vscode/codicons",
-          "dist",
-          "codicon.css",
-        ),
-      );
+  private setupWebview(webview: vscode.Webview, viewType: string) {
+    if (this._isDisposed) {
+      return;
+    }
 
-      this._panel.webview.html = `
+    webview.options = {
+      enableScripts: true,
+      localResourceRoots: [this.context.extensionUri],
+    };
+
+    const messageDisposable = webview.onDidReceiveMessage((message) => {
+      if (this._isDisposed) {
+        return;
+      }
+
+      if (message.type === "answer") {
+        this.extension.sendAnswer(message.answer, message.questionId);
+        this._currentQuestions = [];
+        this._currentAnswerText = "";
+      } else if (message.type === "openFile") {
+        this.handleOpenFile(message);
+      } else if (message.type === "updateAnswerText") {
+        this._currentAnswerText = message.answerText || "";
+      }
+    });
+
+    this._disposables.push(messageDisposable);
+
+    const layoutType = this.getLayoutType(viewType);
+    this.setWebviewHTML(webview, layoutType);
+  }
+
+  private getLayoutType(viewType: string): "sidebar" | "editor" {
+    if (viewType.includes("extensionView")) {
+      return "sidebar";
+    }
+    return "editor";
+  }
+
+  private setWebviewHTML(
+    webview: vscode.Webview,
+    layoutType: "sidebar" | "editor" = "editor",
+  ) {
+    const nonce = this.getNonce();
+
+    const stylesUri = webview.asWebviewUri(
+      vscode.Uri.joinPath(this.context.extensionUri, "media", "styles.css"),
+    );
+    const prismCssUri = webview.asWebviewUri(
+      vscode.Uri.joinPath(this.context.extensionUri, "media", "prism.css"),
+    );
+    const prismJsUri = webview.asWebviewUri(
+      vscode.Uri.joinPath(this.context.extensionUri, "media", "prism.js"),
+    );
+    const scriptUri = webview.asWebviewUri(
+      vscode.Uri.joinPath(this.context.extensionUri, "media", "main.js"),
+    );
+    const codiconsUri = webview.asWebviewUri(
+      vscode.Uri.joinPath(
+        this.context.extensionUri,
+        "node_modules",
+        "@vscode/codicons",
+        "dist",
+        "codicon.css",
+      ),
+    );
+
+    const layoutClass = `layout-${layoutType}`;
+
+    webview.html = `
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -116,7 +307,7 @@ export class QuestionWebviewProvider {
   <link href="${prismCssUri}" rel="stylesheet">
   <link href="${codiconsUri}" rel="stylesheet">
 </head>
-<body>
+<body class="${layoutClass}">
   <div class="container">
     <div id="no-question" class="no-question">
       <div class="no-question-icon">💭</div>
@@ -135,7 +326,7 @@ export class QuestionWebviewProvider {
 
         <div id="question-text" class="question-text">
           <button id="copy-button" class="copy-button"
-                  title="質問をコピー" aria-label="質問をクリップボードにコピー">
+                  title="Copy question" aria-label="Copy question to clipboard">
             <i class="codicon codicon-copy"></i>
           </button>
         </div>
@@ -156,7 +347,6 @@ export class QuestionWebviewProvider {
   <script nonce="${nonce}" src="${scriptUri}"></script>
 </body>
 </html>`;
-    }
   }
 
   private getNonce() {
