@@ -131,6 +131,13 @@ export class QuestionWebviewProvider implements vscode.WebviewViewProvider {
     }
   }
 
+  public closeEditor(): void {
+    if (this.getWebviewPosition() === "editor" && this._panel) {
+      this._panel.dispose();
+      this._panel = undefined;
+    }
+  }
+
   private getWebviewPosition(): string {
     return vscode.workspace
       .getConfiguration("askHumanVscode")
