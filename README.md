@@ -27,6 +27,19 @@ Configure the extension in VS Code settings:
 }
 ```
 
+### Interface Settings
+
+```json
+{
+  "askHumanVscode.webviewPosition": "editor"
+}
+```
+
+Choose where questions appear:
+
+- `"editor"` - In editor tabs (default)
+- `"extension"` - In sidebar panel
+
 ## Usage
 
 1. The extension automatically starts when VS Code opens
