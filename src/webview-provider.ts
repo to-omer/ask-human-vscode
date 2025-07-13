@@ -68,7 +68,7 @@ export class QuestionWebviewProvider implements vscode.WebviewViewProvider {
       this._panel = undefined;
     });
 
-    this.setupWebview(this._panel.webview, "editor");
+    this.setupWebview(this._panel.webview);
   }
 
   public resolveWebviewView(
@@ -80,7 +80,7 @@ export class QuestionWebviewProvider implements vscode.WebviewViewProvider {
       this._extensionView = webviewView;
     }
 
-    this.setupWebview(webviewView.webview, webviewView.viewType);
+    this.setupWebview(webviewView.webview);
 
     this.sendStateToWebview(webviewView.webview);
 
@@ -235,7 +235,7 @@ export class QuestionWebviewProvider implements vscode.WebviewViewProvider {
     this._currentAnswerText = "";
   }
 
-  private setupWebview(webview: vscode.Webview, viewType: string) {
+  private setupWebview(webview: vscode.Webview) {
     if (this._isDisposed) {
       return;
     }
@@ -263,21 +263,10 @@ export class QuestionWebviewProvider implements vscode.WebviewViewProvider {
 
     this._disposables.push(messageDisposable);
 
-    const layoutType = this.getLayoutType(viewType);
-    this.setWebviewHTML(webview, layoutType);
+    this.setWebviewHTML(webview);
   }
 
-  private getLayoutType(viewType: string): "sidebar" | "editor" {
-    if (viewType.includes("extensionView")) {
-      return "sidebar";
-    }
-    return "editor";
-  }
-
-  private setWebviewHTML(
-    webview: vscode.Webview,
-    layoutType: "sidebar" | "editor" = "editor",
-  ) {
+  private setWebviewHTML(webview: vscode.Webview) {
     const nonce = this.getNonce();
 
     const stylesUri = webview.asWebviewUri(
@@ -302,8 +291,6 @@ export class QuestionWebviewProvider implements vscode.WebviewViewProvider {
       ),
     );
 
-    const layoutClass = `layout-${layoutType}`;
-
     webview.html = `
 <!DOCTYPE html>
 <html lang="en">
@@ -316,7 +303,7 @@ export class QuestionWebviewProvider implements vscode.WebviewViewProvider {
   <link href="${prismCssUri}" rel="stylesheet">
   <link href="${codiconsUri}" rel="stylesheet">
 </head>
-<body class="${layoutClass}">
+<body>
   <div class="container">
     <div id="no-question" class="no-question">
       <div class="no-question-icon">💭</div>
