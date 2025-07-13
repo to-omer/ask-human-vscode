@@ -82,9 +82,9 @@ window.addEventListener("message", (event) => {
     } else {
       document.getElementById("question-container").style.display = "none";
       document.getElementById("no-question").style.display = "block";
+      document.getElementById("answer-textarea").value = "";
     }
   } else if (message.type === "selectQuestion") {
-    // NEW: Handle question selection from toolbar
     selectQuestion(message.questionId);
   } else if (message.type === "restoreAnswerText") {
     const textarea = document.getElementById("answer-textarea");

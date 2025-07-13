@@ -236,7 +236,6 @@ export class VSCodeExtension {
       title: "Select Question",
       placeHolder: "Choose a question to focus on",
       onDidSelectItem: (item: any) => {
-        // Send selected question to WebView
         this.webviewProvider.postMessage({
           type: "selectQuestion",
           questionId: item.id,

@@ -251,9 +251,8 @@ export class QuestionWebviewProvider implements vscode.WebviewViewProvider {
       }
 
       if (message.type === "answer") {
-        this.extension.sendAnswer(message.answer, message.questionId);
-        this._currentQuestions = [];
         this._currentAnswerText = "";
+        this.extension.sendAnswer(message.answer, message.questionId);
       } else if (message.type === "openFile") {
         this.handleOpenFile(message);
       } else if (message.type === "updateAnswerText") {
