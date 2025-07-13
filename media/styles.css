@@ -8,145 +8,47 @@ body {
 }
 
 .container {
-  max-width: 800px;
-  margin: 0 auto;
-  padding: 16px;
+  padding: 8px 16px;
+  height: 100vh;
+  box-sizing: border-box;
+}
+
+@media (min-width: 900px) {
+  .container {
+    max-width: 800px;
+    margin: 0 auto;
+    padding: 20px;
+  }
 }
 
 .question-panel {
   display: none;
-  background-color: var(--vscode-panel-background);
-  border: 1px solid var(--vscode-panel-border);
-  border-radius: 6px;
-  margin-bottom: 16px;
-  overflow: hidden;
-}
-
-.question-content {
-  padding: 20px;
 }
 
 .question-text {
-  margin: 0 0 20px 0;
+  margin: 0 0 8px 0;
+  padding: 4px;
   position: relative;
   white-space: normal;
-  font-size: 13px;
-  line-height: 1.6;
-  background-color: var(--vscode-textCodeBlock-background);
-  padding: 16px;
-  border-radius: 4px;
-  border-left: 3px solid var(--vscode-textLink-foreground);
-  font-family: var(--vscode-editor-font-family);
+  font-size: var(--vscode-font-size);
+  line-height: 1.5;
+  font-family: var(--vscode-font-family);
   word-wrap: break-word;
 }
 
 .form-group {
-  margin-bottom: 16px;
-}
-
-.question-selector {
-  position: relative;
-  display: none;
-  width: 100%;
-  margin-bottom: 16px;
-}
-
-.question-selector.show {
-  display: flex;
-}
-
-.question-dropdown {
-  display: none;
-  position: absolute;
-  top: 100%;
-  right: 0;
-  min-width: 250px;
-  background-color: var(--vscode-editor-background);
-  border: 1px solid var(--vscode-dropdown-border);
-  border-radius: 3px;
-  box-shadow: 0 2px 8px var(--vscode-widget-shadow);
-  z-index: 1000;
-  max-height: 200px;
-  overflow-y: auto;
-}
-
-.question-selector-button {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background-color: var(--vscode-button-background);
-  color: var(--vscode-button-foreground);
-  border: 1px solid var(--vscode-button-border);
-  padding: 6px 8px;
-  border-radius: 3px;
-  cursor: pointer;
-  width: 28px;
-  height: 28px;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12);
-  transition: all 0.2s ease;
-  margin-left: auto;
-}
-
-.question-selector-button:hover {
-  background-color: var(--vscode-button-hoverBackground);
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15);
-  transform: translateY(-1px);
-}
-
-.question-selector-button:focus {
-  outline: 1px solid var(--vscode-focusBorder);
-  outline-offset: -1px;
-}
-
-.question-option {
-  padding: 6px 8px;
-  cursor: pointer;
-  color: var(--vscode-dropdown-foreground);
-}
-
-.question-option:hover {
-  background-color: var(--vscode-list-hoverBackground);
-}
-
-.add-icon {
-  width: 16px;
-  height: 16px;
-  position: relative;
-}
-
-.add-icon::before,
-.add-icon::after {
-  content: "";
-  position: absolute;
-  background-color: currentColor;
-}
-
-.add-icon::before {
-  width: 8px;
-  height: 2px;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
-}
-
-.add-icon::after {
-  width: 2px;
-  height: 8px;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
+  margin-bottom: 8px;
 }
 
 .answer-textarea {
   width: 100%;
-  min-height: 100px;
+  min-height: 60px;
   background-color: var(--vscode-input-background);
   color: var(--vscode-input-foreground);
   border: 1px solid var(--vscode-input-border);
-  padding: 8px 12px;
+  padding: 6px;
   resize: vertical;
   font-family: var(--vscode-editor-font-family);
-  font-size: 13px;
   border-radius: 2px;
   box-sizing: border-box;
 }
@@ -164,17 +66,16 @@ body {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-top: 12px;
+  margin-top: 8px;
 }
 
 .send-button {
   background-color: var(--vscode-button-background);
   color: var(--vscode-button-foreground);
   border: none;
-  padding: 6px 14px;
+  padding: 4px 8px;
   cursor: pointer;
   border-radius: 2px;
-  font-size: 13px;
   font-weight: 400;
   display: flex;
   align-items: center;
@@ -196,21 +97,20 @@ body {
 }
 
 .keyboard-hint {
-  font-size: 11px;
   color: var(--vscode-descriptionForeground);
+  opacity: 0.8;
 }
 
 .no-question {
   text-align: center;
   color: var(--vscode-descriptionForeground);
-  font-size: 13px;
-  margin-top: 80px;
-  padding: 40px 16px;
+  margin-top: 40px;
+  padding: 20px 10px;
 }
 
 .no-question-icon {
-  font-size: 32px;
-  margin-bottom: 12px;
+  font-size: 1.5rem;
+  margin-bottom: 8px;
   opacity: 0.6;
 }
 
@@ -321,7 +221,6 @@ body {
   margin: 12px 0;
 }
 
-/* PrismJSシンタックスハイライト */
 .question-text .token.comment,
 .question-text .token.prolog,
 .question-text .token.doctype,
@@ -457,4 +356,14 @@ body {
 
 .copy-button .codicon {
   font-size: 16px;
+}
+
+.question-text a[data-file-uri],
+.question-text code[data-file-uri] {
+  cursor: pointer;
+}
+
+.question-text a[data-file-uri]:hover,
+.question-text code[data-file-uri]:hover {
+  text-decoration: underline;
 }

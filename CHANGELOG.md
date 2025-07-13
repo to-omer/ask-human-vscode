@@ -2,6 +2,16 @@
 
 All notable changes to the "ask-human-vscode" extension will be documented in this file.
 
+## [1.3.0] - 2025-07-14
+
+### Added
+
+- WebView position switching between extension sidebar and editor views (`askHumanVscode.webviewPosition`)
+- Question selection toolbar integration with VS Code QuickPick
+- Status bar question notifications with Ask+ indicator
+- File path click functionality with line number support
+- Auto-close functionality for editor webview when no questions remain
+
 ## [1.2.0] - 2025-07-10
 
 ### Added

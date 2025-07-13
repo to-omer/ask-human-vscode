@@ -20,6 +20,25 @@ function updateQuestionDisplay() {
       questionText.appendChild(copyButton);
     }
 
+    questionText
+      .querySelectorAll("a[data-file-uri], code[data-file-uri]")
+      .forEach((element) => {
+        element.addEventListener("click", (event) => {
+          event.preventDefault();
+          const fileUri = element.getAttribute("data-file-uri");
+          const startLine = element.getAttribute("data-start-line");
+          const endLine = element.getAttribute("data-end-line");
+          if (fileUri) {
+            vscode.postMessage({
+              type: "openFile",
+              fileUri: fileUri,
+              startLine: startLine ? parseInt(startLine, 10) : undefined,
+              endLine: endLine ? parseInt(endLine, 10) : undefined,
+            });
+          }
+        });
+      });
+
     questionText.style.display = "block";
 
     if (typeof Prism !== "undefined") {
@@ -33,44 +52,6 @@ function updateQuestionDisplay() {
 function selectQuestion(questionId) {
   currentQuestionId = questionId;
   updateQuestionDisplay();
-  updateQuestionSelector();
-}
-
-function updateQuestionSelector() {
-  const selector = document.getElementById("question-selector");
-  const dropdown = document.getElementById("question-dropdown");
-
-  if (questions.length <= 1) {
-    selector.classList.remove("show");
-    return;
-  }
-
-  selector.classList.add("show");
-  dropdown.innerHTML = "";
-
-  questions.forEach((q) => {
-    if (q.id !== currentQuestionId) {
-      const option = document.createElement("div");
-      option.className = "question-option";
-      const plainText = stripHtml(q.processedQuestion);
-      option.textContent = `${plainText.substring(0, 60)}${plainText.length > 60 ? "..." : ""}`;
-      option.addEventListener("click", () => {
-        selectQuestion(q.id);
-        toggleDropdown(false);
-      });
-      dropdown.appendChild(option);
-    }
-  });
-}
-
-function toggleDropdown(show) {
-  const dropdown = document.getElementById("question-dropdown");
-
-  if (show === undefined) {
-    show = dropdown.style.display === "none";
-  }
-
-  dropdown.style.display = show ? "block" : "none";
 }
 
 function sendAnswer() {
@@ -101,20 +82,15 @@ window.addEventListener("message", (event) => {
     } else {
       document.getElementById("question-container").style.display = "none";
       document.getElementById("no-question").style.display = "block";
+      document.getElementById("answer-textarea").value = "";
     }
-  }
-});
-
-document
-  .getElementById("question-selector-button")
-  .addEventListener("click", () => {
-    toggleDropdown();
-  });
-
-document.addEventListener("click", (e) => {
-  const selector = document.getElementById("question-selector");
-  if (!selector.contains(e.target)) {
-    toggleDropdown(false);
+  } else if (message.type === "selectQuestion") {
+    selectQuestion(message.questionId);
+  } else if (message.type === "restoreAnswerText") {
+    const textarea = document.getElementById("answer-textarea");
+    if (textarea) {
+      textarea.value = message.answerText || "";
+    }
   }
 });
 
@@ -126,6 +102,16 @@ document.getElementById("answer-textarea").addEventListener("keydown", (e) => {
     sendAnswer();
   }
 });
+
+document
+  .getElementById("answer-textarea")
+  .addEventListener("input", (event) => {
+    const answerText = event.target.value || "";
+    vscode.postMessage({
+      type: "updateAnswerText",
+      answerText: answerText,
+    });
+  });
 
 function copyCurrentQuestion() {
   const selectedQuestion = questions.find((q) => q.id === currentQuestionId);

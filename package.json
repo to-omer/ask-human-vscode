@@ -2,7 +2,7 @@
   "name": "vscode-ask-human-mcp",
   "displayName": "VS Code Ask Human MCP Server",
   "description": "Enable AI Agents to ask questions to developers through VS Code",
-  "version": "1.2.0",
+  "version": "1.3.0",
   "publisher": "to-omer",
   "license": "MIT",
   "repository": {
@@ -32,8 +32,54 @@
         "command": "askHumanVscode.showPanel",
         "title": "Show Panel",
         "category": "Ask Human"
+      },
+      {
+        "command": "askHumanVscode.selectQuestion",
+        "title": "Select Question",
+        "category": "Ask Human",
+        "icon": "$(question)"
       }
     ],
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "askHumanVscode",
+          "title": "Ask Human",
+          "icon": "resources/icon-light.svg"
+        }
+      ]
+    },
+    "views": {
+      "askHumanVscode": [
+        {
+          "id": "askHumanVscode.extensionView",
+          "name": "Questions",
+          "type": "webview",
+          "icon": "resources/icon-light.svg",
+          "when": "config.askHumanVscode.webviewPosition == 'extension'"
+        }
+      ]
+    },
+    "menus": {
+      "editor/title": [
+        {
+          "command": "askHumanVscode.selectQuestion",
+          "when": "config.askHumanVscode.webviewPosition == 'editor' && askHumanVscode.hasQuestions",
+          "group": "navigation",
+          "title": "Select Question",
+          "icon": "$(question)"
+        }
+      ],
+      "view/title": [
+        {
+          "command": "askHumanVscode.selectQuestion",
+          "when": "view == 'askHumanVscode.extensionView' && askHumanVscode.hasQuestions",
+          "group": "navigation",
+          "title": "Select Question",
+          "icon": "$(question)"
+        }
+      ]
+    },
     "configuration": {
       "title": "Ask Human VS Code",
       "properties": {
@@ -63,6 +109,15 @@
             "Question including relevant code, attempted approaches, and expected outcome",
             "Question with background information, options considered, and decision criteria"
           ]
+        },
+        "askHumanVscode.webviewPosition": {
+          "type": "string",
+          "enum": [
+            "extension",
+            "editor"
+          ],
+          "default": "editor",
+          "description": "Select position to display Ask Human WebView"
         }
       }
     }

@@ -58,6 +58,9 @@ export class VSCodeExtension {
       vscode.commands.registerCommand("askHumanVscode.showPanel", () => {
         this.webviewProvider.updateQuestions(this.getQuestions());
       }),
+      vscode.commands.registerCommand("askHumanVscode.selectQuestion", () => {
+        this.showQuestionPicker();
+      }),
     );
 
     context.subscriptions.push(this.statusBarItem);
@@ -136,15 +139,21 @@ export class VSCodeExtension {
 
   public updateStatusBar() {
     const isConnected = this.mcpServer.isRunning();
-    this.statusBarItem.text = "$(plug) Ask";
 
-    if (isConnected) {
-      this.statusBarItem.tooltip = `Ask Human MCP Server: Connected on port ${this.port} (Click to disconnect)`;
-      this.statusBarItem.color = undefined;
+    if (this.questions.size > 0) {
+      this.statusBarItem.text = "$(plug) Ask+";
     } else {
-      this.statusBarItem.tooltip = `Ask Human MCP Server: Port ${this.port} in use by another VS Code (Click to attempt takeover)`;
-      this.statusBarItem.color = new vscode.ThemeColor("descriptionForeground");
+      this.statusBarItem.text = "$(plug) Ask";
     }
+
+    this.statusBarItem.color = isConnected
+      ? undefined
+      : new vscode.ThemeColor("descriptionForeground");
+
+    this.statusBarItem.tooltip = isConnected
+      ? `Ask Human MCP Server: Connected on port ${this.port} (Click to disconnect)`
+      : `Ask Human MCP Server: Port ${this.port} in use by another VS Code (Click to attempt takeover)`;
+
     this.statusBarItem.show();
   }
 
@@ -162,10 +171,10 @@ export class VSCodeExtension {
 
   public async askHuman(question: string): Promise<string> {
     this.outputChannel.info(`Question received: ${question}`);
-    return new Promise((resolve) => {
+    return new Promise(async (resolve) => {
       const questionId = randomUUID();
       const processedQuestion =
-        this.markdownProcessor.processMarkdown(question);
+        await this.markdownProcessor.processMarkdown(question);
       this.questions.set(questionId, {
         originalQuestion: question,
         processedQuestion: processedQuestion,
@@ -173,6 +182,8 @@ export class VSCodeExtension {
       });
 
       this.webviewProvider.updateQuestions(this.getQuestions());
+      this.updateStatusBar();
+      this.updateContexts();
     });
   }
 
@@ -184,6 +195,13 @@ export class VSCodeExtension {
       this.questions.delete(questionId);
 
       this.webviewProvider.updateQuestions(this.getQuestions());
+      this.updateContexts();
+
+      if (this.questions.size === 0) {
+        this.webviewProvider.closeEditor();
+      }
+
+      this.updateStatusBar();
     }
   }
 
@@ -199,6 +217,40 @@ export class VSCodeExtension {
 
     this.webviewProvider.dispose();
     this.statusBarItem.hide();
+  }
+
+  private async showQuestionPicker(): Promise<void> {
+    const questions = Array.from(this.questions.entries());
+
+    if (questions.length === 0) {
+      vscode.window.showInformationMessage("No questions available");
+      return;
+    }
+
+    const items = questions.map(([id, q]) => ({
+      id,
+      label: q.originalQuestion,
+    }));
+
+    await vscode.window.showQuickPick(items, {
+      title: "Select Question",
+      placeHolder: "Choose a question to focus on",
+      onDidSelectItem: (item: any) => {
+        this.webviewProvider.postMessage({
+          type: "selectQuestion",
+          questionId: item.id,
+        });
+      },
+    });
+  }
+
+  private updateContexts(): void {
+    const hasQuestions = this.questions.size > 0;
+    vscode.commands.executeCommand(
+      "setContext",
+      "askHumanVscode.hasQuestions",
+      hasQuestions,
+    );
   }
 }
 
