@@ -136,15 +136,21 @@ export class VSCodeExtension {
 
   public updateStatusBar() {
     const isConnected = this.mcpServer.isRunning();
-    this.statusBarItem.text = "$(plug) Ask";
 
-    if (isConnected) {
-      this.statusBarItem.tooltip = `Ask Human MCP Server: Connected on port ${this.port} (Click to disconnect)`;
-      this.statusBarItem.color = undefined;
+    if (this.questions.size > 0) {
+      this.statusBarItem.text = "$(plug) Ask+";
     } else {
-      this.statusBarItem.tooltip = `Ask Human MCP Server: Port ${this.port} in use by another VS Code (Click to attempt takeover)`;
-      this.statusBarItem.color = new vscode.ThemeColor("descriptionForeground");
+      this.statusBarItem.text = "$(plug) Ask";
     }
+
+    this.statusBarItem.color = isConnected
+      ? undefined
+      : new vscode.ThemeColor("descriptionForeground");
+
+    this.statusBarItem.tooltip = isConnected
+      ? `Ask Human MCP Server: Connected on port ${this.port} (Click to disconnect)`
+      : `Ask Human MCP Server: Port ${this.port} in use by another VS Code (Click to attempt takeover)`;
+
     this.statusBarItem.show();
   }
 
@@ -173,6 +179,7 @@ export class VSCodeExtension {
       });
 
       this.webviewProvider.updateQuestions(this.getQuestions());
+      this.updateStatusBar();
     });
   }
 
@@ -184,6 +191,7 @@ export class VSCodeExtension {
       this.questions.delete(questionId);
 
       this.webviewProvider.updateQuestions(this.getQuestions());
+      this.updateStatusBar();
     }
   }
 
