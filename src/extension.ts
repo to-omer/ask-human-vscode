@@ -162,10 +162,10 @@ export class VSCodeExtension {
 
   public async askHuman(question: string): Promise<string> {
     this.outputChannel.info(`Question received: ${question}`);
-    return new Promise((resolve) => {
+    return new Promise(async (resolve) => {
       const questionId = randomUUID();
       const processedQuestion =
-        this.markdownProcessor.processMarkdown(question);
+        await this.markdownProcessor.processMarkdown(question);
       this.questions.set(questionId, {
         originalQuestion: question,
         processedQuestion: processedQuestion,
