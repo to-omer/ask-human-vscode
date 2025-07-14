@@ -65,6 +65,10 @@ Add to your MCP client configuration:
 }
 ```
 
+## AI Agent Integration
+
+For AI agent configuration and usage patterns, see [`USAGE_FOR_AGENT.md`](USAGE_FOR_AGENT.md).
+
 ## License
 
 MIT - see [LICENSE.txt](LICENSE.txt)
