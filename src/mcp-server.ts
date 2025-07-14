@@ -7,8 +7,18 @@ import * as vscode from "vscode";
 import { z } from "zod";
 import packageJson from "../package.json";
 
+interface ChoiceOption {
+  label: string;
+  description: string;
+}
+
+interface ChoiceConfig {
+  choices: ChoiceOption[];
+  multiple: boolean;
+}
+
 interface Extension {
-  askHuman(question: string): Promise<string>;
+  askHuman(question: string, choice?: ChoiceConfig): Promise<string>;
   updateStatusBar(): void;
 }
 
@@ -90,11 +100,28 @@ export class HumanMCPServer {
         description: this.getToolDescription(),
         inputSchema: {
           question: z.string().describe(this.getQuestionDescription()),
+          choice: z
+            .object({
+              choices: z
+                .array(
+                  z.object({
+                    label: z.string().describe("Choice title"),
+                    description: z.string().describe("Markdown description"),
+                  }),
+                )
+                .describe("Available options"),
+              multiple: z
+                .boolean()
+                .default(false)
+                .describe("Allow multiple selections"),
+            })
+            .optional()
+            .describe("Optional choice interface"),
         },
       },
-      async ({ question }) => {
+      async ({ question, choice }) => {
         try {
-          const answer = await this.extension.askHuman(question);
+          const answer = await this.extension.askHuman(question, choice);
 
           return {
             content: [

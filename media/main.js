@@ -1,6 +1,8 @@
 const vscode = acquireVsCodeApi();
 let currentQuestionId = null;
 let questions = [];
+let selectedChoices = new Set(); // For single/multiple selection tracking
+let currentChoiceConfig = null;
 
 function stripHtml(html) {
   const div = document.createElement("div");
@@ -44,27 +46,33 @@ function updateQuestionDisplay() {
     if (typeof Prism !== "undefined") {
       Prism.highlightAllUnder(questionText);
     }
+
+    updateChoicesDisplay(selectedQuestion.choice);
   } else {
     questionText.style.display = "none";
+    updateChoicesDisplay(null);
   }
 }
 
 function selectQuestion(questionId) {
   currentQuestionId = questionId;
+  selectedChoices.clear();
   updateQuestionDisplay();
 }
 
 function sendAnswer() {
-  const answerTextarea = document.getElementById("answer-textarea");
-  const answer = answerTextarea.value.trim();
+  const finalAnswer = createFinalAnswer();
 
-  if (answer && currentQuestionId) {
+  if (finalAnswer && currentQuestionId) {
     vscode.postMessage({
       type: "answer",
-      answer,
+      answer: finalAnswer,
       questionId: currentQuestionId,
     });
+    const answerTextarea = document.getElementById("answer-textarea");
     answerTextarea.value = "";
+    selectedChoices.clear();
+    updateSelectionUI();
   }
 }
 
@@ -95,6 +103,97 @@ window.addEventListener("message", (event) => {
 });
 
 document.getElementById("send-button").addEventListener("click", sendAnswer);
+
+function updateChoicesDisplay(choiceConfig) {
+  const container = document.getElementById("choices-container");
+  const choicesList = document.getElementById("choices-list");
+
+  currentChoiceConfig = choiceConfig;
+  selectedChoices.clear();
+
+  if (choiceConfig && choiceConfig.choices.length > 0) {
+    container.style.display = "block";
+    choicesList.innerHTML = "";
+
+    choiceConfig.choices.forEach((choice, index) => {
+      const card = document.createElement("div");
+      card.className = "choice-card";
+
+      const descriptionHtml = choice.processedDescription;
+
+      if (choiceConfig.multiple) {
+        card.innerHTML = `
+          <label class="choice-container" for="choice-${index}">
+            <input type="checkbox" class="choice-checkbox" id="choice-${index}" value="${choice.label}">
+            <div class="choice-content">
+              <div class="choice-title">${choice.label}</div>
+              <div class="choice-description">${descriptionHtml}</div>
+            </div>
+          </label>
+        `;
+
+        const checkbox = card.querySelector('input[type="checkbox"]');
+        checkbox.addEventListener("change", () => {
+          if (checkbox.checked) {
+            selectedChoices.add(choice.label);
+          } else {
+            selectedChoices.delete(choice.label);
+          }
+          updateSelectionUI();
+        });
+      } else {
+        card.innerHTML = `
+          <div class="choice-container">
+            <div class="choice-content">
+              <div class="choice-title">${choice.label}</div>
+              <div class="choice-description">${descriptionHtml}</div>
+            </div>
+          </div>
+        `;
+
+        card.addEventListener("click", () => {
+          selectedChoices.clear();
+          selectedChoices.add(choice.label);
+          updateSelectionUI();
+        });
+      }
+
+      choicesList.appendChild(card);
+    });
+    if (typeof Prism !== "undefined") {
+      Prism.highlightAllUnder(choicesList);
+    }
+  } else {
+    container.style.display = "none";
+  }
+}
+
+function updateSelectionUI() {
+  if (currentChoiceConfig && !currentChoiceConfig.multiple) {
+    document.querySelectorAll(".choice-card").forEach((card) => {
+      card.classList.remove("selected");
+      const title = card.querySelector(".choice-title")?.textContent;
+      if (title && selectedChoices.has(title)) {
+        card.classList.add("selected");
+      }
+    });
+  }
+}
+
+function createFinalAnswer() {
+  const textarea = document.getElementById("answer-textarea");
+  const textContent = textarea.value.trim();
+
+  if (selectedChoices.size === 0) {
+    return textContent;
+  }
+
+  if (!textContent) {
+    return Array.from(selectedChoices).join(", ");
+  }
+  const selectionText = Array.from(selectedChoices).join(", ");
+  return selectionText + "\n\n" + textContent;
+}
 
 document.getElementById("answer-textarea").addEventListener("keydown", (e) => {
   if (e.ctrlKey && e.key === "Enter") {
