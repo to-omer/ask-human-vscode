@@ -142,6 +142,8 @@ export class QuestionWebviewProvider implements vscode.WebviewViewProvider {
         this._extensionView.show();
       }
     }
+
+    this.updateBadge();
   }
 
   public closeEditor(): void {
@@ -225,6 +227,23 @@ export class QuestionWebviewProvider implements vscode.WebviewViewProvider {
       return this._panel?.viewColumn === vscode.ViewColumn.Two
         ? vscode.ViewColumn.One
         : vscode.ViewColumn.Two;
+    }
+  }
+
+  private updateBadge(): void {
+    if (!this._extensionView) {
+      return;
+    }
+
+    const questionCount = this._currentQuestions.length;
+
+    if (questionCount === 0) {
+      this._extensionView.badge = undefined;
+    } else {
+      this._extensionView.badge = {
+        value: questionCount,
+        tooltip: `${questionCount} questions pending`,
+      };
     }
   }
 
