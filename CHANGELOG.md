@@ -2,6 +2,15 @@
 
 All notable changes to the "ask-human-vscode" extension will be documented in this file.
 
+## [1.4.0] - 2025-07-19
+
+### Added
+
+- Question count badge in sidebar panel
+- Notification sound for new questions
+- Multiple choice selection interface
+- Example usage for AI agents in documentation
+
 ## [1.3.0] - 2025-07-14
 
 ### Added
