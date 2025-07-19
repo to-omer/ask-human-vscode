@@ -1,9 +1,10 @@
 import { randomUUID } from "crypto";
 import * as vscode from "vscode";
 import { z } from "zod";
+import { MarkdownProcessor } from "./markdown-processor";
 import { HumanMCPServer } from "./mcp-server";
 import { QuestionWebviewProvider } from "./webview-provider";
-import { MarkdownProcessor } from "./markdown-processor";
+import playSound = require("play-sound");
 
 interface ChoiceOption {
   label: string;
@@ -40,8 +41,10 @@ export class VSCodeExtension {
   private statusBarItem: vscode.StatusBarItem;
   private outputChannel: vscode.LogOutputChannel;
   private port: number;
+  private context: vscode.ExtensionContext;
 
   constructor(context: vscode.ExtensionContext) {
+    this.context = context;
     this.outputChannel = vscode.window.createOutputChannel("Ask Human MCP", {
       log: true,
     });
@@ -149,6 +152,25 @@ export class VSCodeExtension {
     }
   }
 
+  private playNotificationSound(): void {
+    if (
+      vscode.workspace
+        .getConfiguration("askHumanVscode")
+        .get("notification.enabled", true)
+    ) {
+      const soundUri = vscode.Uri.joinPath(
+        this.context.extensionUri,
+        "media",
+        "notify.mp3",
+      );
+      playSound().play(soundUri.fsPath, (err: any) => {
+        if (err) {
+          this.outputChannel.warn(`Failed to play notification sound: ${err}`);
+        }
+      });
+    }
+  }
+
   public updateStatusBar() {
     const isConnected = this.mcpServer.isRunning();
 
@@ -225,6 +247,7 @@ export class VSCodeExtension {
 
       this.webviewProvider.updateQuestions(this.getQuestions());
       this.updateStatusBar();
+      this.playNotificationSound();
       this.updateContexts();
     });
   }
