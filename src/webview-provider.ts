@@ -1,5 +1,16 @@
 import * as vscode from "vscode";
-import { VSCodeExtension } from "./extension";
+import { VSCodeExtension, QuestionData } from "./extension";
+
+interface ChoiceOption {
+  label: string;
+  description: string;
+  processedDescription: string;
+}
+
+interface ChoiceConfig {
+  choices: ChoiceOption[];
+  multiple: boolean;
+}
 
 export class QuestionWebviewProvider implements vscode.WebviewViewProvider {
   private _panel?: vscode.WebviewPanel;
@@ -8,6 +19,7 @@ export class QuestionWebviewProvider implements vscode.WebviewViewProvider {
     id: string;
     question: string;
     processedQuestion: string;
+    choice?: ChoiceConfig;
   }> = [];
   private _currentAnswerText: string = "";
   private _disposables: vscode.Disposable[] = [];
@@ -112,6 +124,7 @@ export class QuestionWebviewProvider implements vscode.WebviewViewProvider {
       id: string;
       question: string;
       processedQuestion: string;
+      choice?: ChoiceConfig;
     }>,
   ) {
     this._currentQuestions = questions;
@@ -129,6 +142,8 @@ export class QuestionWebviewProvider implements vscode.WebviewViewProvider {
         this._extensionView.show();
       }
     }
+
+    this.updateBadge();
   }
 
   public closeEditor(): void {
@@ -212,6 +227,23 @@ export class QuestionWebviewProvider implements vscode.WebviewViewProvider {
       return this._panel?.viewColumn === vscode.ViewColumn.Two
         ? vscode.ViewColumn.One
         : vscode.ViewColumn.Two;
+    }
+  }
+
+  private updateBadge(): void {
+    if (!this._extensionView) {
+      return;
+    }
+
+    const questionCount = this._currentQuestions.length;
+
+    if (questionCount === 0) {
+      this._extensionView.badge = undefined;
+    } else {
+      this._extensionView.badge = {
+        value: questionCount,
+        tooltip: `${questionCount} questions pending`,
+      };
     }
   }
 
@@ -316,6 +348,10 @@ export class QuestionWebviewProvider implements vscode.WebviewViewProvider {
                   title="Copy question" aria-label="Copy question to clipboard">
             <i class="codicon codicon-copy"></i>
           </button>
+        </div>
+
+        <div id="choices-container" class="choices-container" style="display: none;">
+          <div id="choices-list" class="choices-list"></div>
         </div>
 
         <div class="form-group">

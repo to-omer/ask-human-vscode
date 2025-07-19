@@ -1,9 +1,29 @@
 import { randomUUID } from "crypto";
 import * as vscode from "vscode";
 import { z } from "zod";
+import { MarkdownProcessor } from "./markdown-processor";
 import { HumanMCPServer } from "./mcp-server";
 import { QuestionWebviewProvider } from "./webview-provider";
-import { MarkdownProcessor } from "./markdown-processor";
+import playSound = require("play-sound");
+
+interface ChoiceOption {
+  label: string;
+  description: string;
+  processedDescription: string;
+}
+
+interface ChoiceConfig {
+  choices: ChoiceOption[];
+  multiple: boolean;
+}
+
+export interface QuestionData {
+  id: string;
+  originalQuestion: string;
+  processedQuestion: string;
+  choice?: ChoiceConfig;
+  resolve: (answer: string) => void;
+}
 
 const MCPServerResponseSchema = z.object({
   name: z.literal("VS Code Ask Human MCP Server"),
@@ -17,19 +37,14 @@ export class VSCodeExtension {
   private webviewProvider: QuestionWebviewProvider;
   private mcpServer: HumanMCPServer;
   private markdownProcessor: MarkdownProcessor;
-  private questions: Map<
-    string,
-    {
-      originalQuestion: string;
-      processedQuestion: string;
-      resolve: (answer: string) => void;
-    }
-  > = new Map();
+  private questions: Map<string, QuestionData> = new Map();
   private statusBarItem: vscode.StatusBarItem;
   private outputChannel: vscode.LogOutputChannel;
   private port: number;
+  private context: vscode.ExtensionContext;
 
   constructor(context: vscode.ExtensionContext) {
+    this.context = context;
     this.outputChannel = vscode.window.createOutputChannel("Ask Human MCP", {
       log: true,
     });
@@ -137,6 +152,25 @@ export class VSCodeExtension {
     }
   }
 
+  private playNotificationSound(): void {
+    if (
+      vscode.workspace
+        .getConfiguration("askHumanVscode")
+        .get("notification.enabled", true)
+    ) {
+      const soundUri = vscode.Uri.joinPath(
+        this.context.extensionUri,
+        "media",
+        "notify.mp3",
+      );
+      playSound().play(soundUri.fsPath, (err: any) => {
+        if (err) {
+          this.outputChannel.warn(`Failed to play notification sound: ${err}`);
+        }
+      });
+    }
+  }
+
   public updateStatusBar() {
     const isConnected = this.mcpServer.isRunning();
 
@@ -161,28 +195,59 @@ export class VSCodeExtension {
     id: string;
     question: string;
     processedQuestion: string;
+    choice?: ChoiceConfig;
   }> {
     return Array.from(this.questions.entries()).map(([id, data]) => ({
       id,
       question: data.originalQuestion,
       processedQuestion: data.processedQuestion,
+      choice: data.choice,
     }));
   }
 
-  public async askHuman(question: string): Promise<string> {
+  public async askHuman(
+    question: string,
+    choice?: {
+      choices: { label: string; description: string }[];
+      multiple: boolean;
+    },
+  ): Promise<string> {
     this.outputChannel.info(`Question received: ${question}`);
     return new Promise(async (resolve) => {
       const questionId = randomUUID();
       const processedQuestion =
         await this.markdownProcessor.processMarkdown(question);
+
+      let choiceConfig: ChoiceConfig | undefined;
+      if (choice) {
+        // Process choice descriptions through MarkdownProcessor
+        const processedChoices = await Promise.all(
+          choice.choices.map(async (choiceOption) => ({
+            label: choiceOption.label,
+            description: choiceOption.description,
+            processedDescription: await this.markdownProcessor.processMarkdown(
+              choiceOption.description,
+            ),
+          })),
+        );
+
+        choiceConfig = {
+          choices: processedChoices,
+          multiple: choice.multiple,
+        };
+      }
+
       this.questions.set(questionId, {
+        id: questionId,
         originalQuestion: question,
         processedQuestion: processedQuestion,
+        choice: choiceConfig,
         resolve,
       });
 
       this.webviewProvider.updateQuestions(this.getQuestions());
       this.updateStatusBar();
+      this.playNotificationSound();
       this.updateContexts();
     });
   }
