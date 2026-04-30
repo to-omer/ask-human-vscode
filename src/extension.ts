@@ -1,194 +1,62 @@
 import { randomUUID } from "crypto";
 import * as vscode from "vscode";
-import { z } from "zod";
 import { MarkdownProcessor } from "./markdown-processor";
-import { HumanMCPServer } from "./mcp-server";
+import {
+  HumanMCPServer,
+  type AskHumanRequest,
+  type AskHumanResult,
+  type QuestionInput,
+} from "./mcp-server";
 import { QuestionWebviewProvider } from "./webview-provider";
 import playSound = require("play-sound");
 
-interface ChoiceOption {
+interface ProcessedChoiceOption {
   label: string;
-  description: string;
+  description?: string;
   processedDescription: string;
 }
 
 interface ChoiceConfig {
-  choices: ChoiceOption[];
+  choices: ProcessedChoiceOption[];
   multiple: boolean;
 }
 
 export interface QuestionData {
   id: string;
+  order: number;
   originalQuestion: string;
   processedQuestion: string;
   choice?: ChoiceConfig;
   resolve: (answer: string) => void;
 }
 
-const MCPServerResponseSchema = z.object({
-  name: z.literal("VS Code Ask Human MCP Server"),
-  version: z.string(),
-  status: z.literal("running"),
-  endpoint: z.literal("/mcp"),
-  instanceId: z.string(),
-});
-
 export class VSCodeExtension {
-  private webviewProvider: QuestionWebviewProvider;
-  private mcpServer: HumanMCPServer;
-  private markdownProcessor: MarkdownProcessor;
-  private questions: Map<string, QuestionData> = new Map();
-  private statusBarItem: vscode.StatusBarItem;
-  private outputChannel: vscode.LogOutputChannel;
-  private port: number;
-  private context: vscode.ExtensionContext;
+  private readonly context: vscode.ExtensionContext;
+  private readonly markdownProcessor = new MarkdownProcessor();
+  private readonly mcpServer: HumanMCPServer;
+  private readonly outputChannel: vscode.LogOutputChannel;
+  private readonly port: number;
+  private readonly questions = new Map<string, QuestionData>();
+  private readonly webviewProvider: QuestionWebviewProvider;
+  private nextQuestionOrder = 0;
 
   constructor(context: vscode.ExtensionContext) {
     this.context = context;
     this.outputChannel = vscode.window.createOutputChannel("Ask Human MCP", {
       log: true,
     });
-    this.markdownProcessor = new MarkdownProcessor();
     this.webviewProvider = new QuestionWebviewProvider(context, this);
 
     const config = vscode.workspace.getConfiguration("askHumanVscode");
     this.port = config.get<number>("port", 11911);
-    this.mcpServer = new HumanMCPServer(this.outputChannel, this.port);
-
-    this.statusBarItem = vscode.window.createStatusBarItem(
-      vscode.StatusBarAlignment.Right,
-      100,
+    this.mcpServer = new HumanMCPServer(
+      this.outputChannel,
+      this.port,
+      context.globalStorageUri.fsPath,
     );
-    this.statusBarItem.command = "askHumanVscode.toggleMCPServer";
 
     this.registerCommands(context);
-    this.startMCPServer(false);
-  }
-
-  private registerCommands(context: vscode.ExtensionContext) {
-    context.subscriptions.push(
-      vscode.commands.registerCommand("askHumanVscode.toggleMCPServer", () => {
-        this.toggleMCPServer();
-      }),
-      vscode.commands.registerCommand("askHumanVscode.showPanel", () => {
-        this.webviewProvider.updateQuestions(this.getQuestions());
-      }),
-      vscode.commands.registerCommand("askHumanVscode.selectQuestion", () => {
-        this.showQuestionPicker();
-      }),
-    );
-
-    context.subscriptions.push(this.statusBarItem);
-  }
-
-  private async startMCPServer(attemptTakeover = true) {
-    try {
-      await this.mcpServer.start(this);
-    } catch {
-      await this.handlePortConflict(attemptTakeover);
-    }
-    this.updateStatusBar();
-  }
-
-  private async handlePortConflict(attemptTakeover: boolean) {
-    try {
-      const response = await fetch(`http://127.0.0.1:${this.port}/`);
-      if (response.ok) {
-        const data = await response.json();
-
-        if (MCPServerResponseSchema.safeParse(data).success) {
-          this.outputChannel.warn(
-            `Port ${this.port} in use by another VS Code Ask Human MCP Server instance`,
-          );
-
-          if (attemptTakeover) {
-            await this.attemptServerTakeover();
-          }
-        } else {
-          this.outputChannel.warn(
-            `Port ${this.port} in use by different server`,
-          );
-        }
-      } else {
-        this.outputChannel.warn(
-          `Port ${this.port} returned HTTP ${response.status}: ${response.statusText}`,
-        );
-      }
-    } catch (error) {
-      this.outputChannel.error("Port conflict resolution failed:", error);
-    }
-  }
-
-  private async attemptServerTakeover() {
-    try {
-      const response = await fetch(`http://127.0.0.1:${this.port}/shutdown`, {
-        method: "POST",
-      });
-
-      if (response.ok) {
-        const result = (await response.json()) as {
-          success: boolean;
-          reason?: string;
-        };
-        if (result.success) {
-          await this.mcpServer.start(this);
-        }
-      }
-    } catch (error) {
-      this.outputChannel.warn("Server takeover failed:", error);
-    }
-  }
-
-  private stopMCPServer() {
-    this.mcpServer.stop();
-    this.updateStatusBar();
-  }
-
-  private async toggleMCPServer() {
-    if (this.mcpServer.isRunning()) {
-      this.stopMCPServer();
-    } else {
-      await this.startMCPServer();
-    }
-  }
-
-  private playNotificationSound(): void {
-    if (
-      vscode.workspace
-        .getConfiguration("askHumanVscode")
-        .get("notification.enabled", true)
-    ) {
-      const soundUri = vscode.Uri.joinPath(
-        this.context.extensionUri,
-        "media",
-        "notify.mp3",
-      );
-      playSound().play(soundUri.fsPath, (err: any) => {
-        if (err) {
-          this.outputChannel.warn(`Failed to play notification sound: ${err}`);
-        }
-      });
-    }
-  }
-
-  public updateStatusBar() {
-    const isConnected = this.mcpServer.isRunning();
-
-    if (this.questions.size > 0) {
-      this.statusBarItem.text = "$(plug) Ask+";
-    } else {
-      this.statusBarItem.text = "$(plug) Ask";
-    }
-
-    this.statusBarItem.color = isConnected
-      ? undefined
-      : new vscode.ThemeColor("descriptionForeground");
-
-    this.statusBarItem.tooltip = isConnected
-      ? `Ask Human MCP Server: Connected on port ${this.port} (Click to disconnect)`
-      : `Ask Human MCP Server: Port ${this.port} in use by another VS Code (Click to attempt takeover)`;
-
-    this.statusBarItem.show();
+    this.startMCPServer();
   }
 
   public getQuestions(): Array<{
@@ -197,91 +65,194 @@ export class VSCodeExtension {
     processedQuestion: string;
     choice?: ChoiceConfig;
   }> {
-    return Array.from(this.questions.entries()).map(([id, data]) => ({
-      id,
-      question: data.originalQuestion,
-      processedQuestion: data.processedQuestion,
-      choice: data.choice,
-    }));
+    return Array.from(this.questions.entries())
+      .sort((a, b) => a[1].order - b[1].order)
+      .map(([id, data]) => ({
+        id,
+        question: data.originalQuestion,
+        processedQuestion: data.processedQuestion,
+        choice: data.choice,
+      }));
   }
 
-  public async askHuman(
-    question: string,
-    choice?: {
-      choices: { label: string; description: string }[];
-      multiple: boolean;
-    },
-  ): Promise<string> {
-    this.outputChannel.info(`Question received: ${question}`);
-    return new Promise(async (resolve) => {
-      const questionId = randomUUID();
-      const processedQuestion =
-        await this.markdownProcessor.processMarkdown(question);
+  public async askHumans(
+    request: AskHumanRequest,
+  ): Promise<AskHumanResult> {
+    this.outputChannel.info(
+      `Question request received: ${request.questions.length} questions`,
+    );
 
-      let choiceConfig: ChoiceConfig | undefined;
-      if (choice) {
-        // Process choice descriptions through MarkdownProcessor
-        const processedChoices = await Promise.all(
-          choice.choices.map(async (choiceOption) => ({
-            label: choiceOption.label,
-            description: choiceOption.description,
-            processedDescription: await this.markdownProcessor.processMarkdown(
-              choiceOption.description,
-            ),
-          })),
-        );
+    const queuedQuestions: Array<{
+      answerId: string;
+      promise: Promise<string>;
+    }> = [];
+    for (const question of request.questions) {
+      queuedQuestions.push(await this.enqueueQuestion(question, request.title));
+    }
 
-        choiceConfig = {
-          choices: processedChoices,
-          multiple: choice.multiple,
-        };
-      }
+    this.notifyQuestionStateChanged();
 
-      this.questions.set(questionId, {
-        id: questionId,
-        originalQuestion: question,
-        processedQuestion: processedQuestion,
-        choice: choiceConfig,
-        resolve,
-      });
+    const answerEntries = await Promise.all(
+      queuedQuestions.map(async (queued) => [
+        queued.answerId,
+        await queued.promise,
+      ]),
+    );
 
-      this.webviewProvider.updateQuestions(this.getQuestions());
-      this.updateStatusBar();
-      this.playNotificationSound();
-      this.updateContexts();
-    });
+    return {
+      answers: Object.fromEntries(answerEntries),
+      submittedAt: new Date().toISOString(),
+    };
   }
 
-  public sendAnswer(answer: string, questionId: string) {
+  public sendAnswer(answer: string, questionId: string): void {
     this.outputChannel.info(`Answer sent: ${answer}`);
     const question = this.questions.get(questionId);
-    if (question) {
-      question.resolve(answer);
-      this.questions.delete(questionId);
-
-      this.webviewProvider.updateQuestions(this.getQuestions());
-      this.updateContexts();
-
-      if (this.questions.size === 0) {
-        this.webviewProvider.closeEditor();
-      }
-
-      this.updateStatusBar();
+    if (!question) {
+      return;
     }
+
+    this.questions.delete(questionId);
+    this.webviewProvider.updateQuestions(this.getQuestions());
+    this.updateContexts();
+
+    if (this.questions.size === 0) {
+      this.webviewProvider.closeEditor();
+    }
+
+    question.resolve(answer);
   }
 
-  public dispose() {
-    if (this.mcpServer.isRunning()) {
-      this.mcpServer.stop();
-    }
+  public getWorkspaceFolders(): string[] {
+    return (
+      vscode.workspace.workspaceFolders?.map((folder) => folder.uri.fsPath) ??
+      []
+    );
+  }
+
+  public dispose(): void {
+    this.mcpServer.stop();
 
     for (const data of this.questions.values()) {
       data.resolve("Extension is being disposed");
     }
     this.questions.clear();
-
     this.webviewProvider.dispose();
-    this.statusBarItem.hide();
+  }
+
+  private registerCommands(context: vscode.ExtensionContext): void {
+    context.subscriptions.push(
+      vscode.commands.registerCommand("askHumanVscode.showPanel", () => {
+        this.webviewProvider.show();
+      }),
+      vscode.commands.registerCommand("askHumanVscode.selectQuestion", () => {
+        this.showQuestionPicker();
+      }),
+      vscode.workspace.onDidChangeWorkspaceFolders(() => {
+        this.mcpServer.updateRegistration().catch((error) => {
+          this.outputChannel.warn(`Failed to update window registry: ${error}`);
+        });
+      }),
+    );
+  }
+
+  private async startMCPServer(): Promise<void> {
+    try {
+      await this.mcpServer.start(this);
+      return;
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "EADDRINUSE") {
+        this.outputChannel.error("Failed to start MCP server:", error);
+        return;
+      }
+    }
+
+    try {
+      await this.mcpServer.start(this, 0);
+      this.outputChannel.info(
+        `Port ${this.port} is in use; started on an available port`,
+      );
+    } catch (error) {
+      this.outputChannel.error("Failed to start MCP server:", error);
+    }
+  }
+
+  private async enqueueQuestion(
+    question: QuestionInput,
+    title?: string,
+  ): Promise<{ answerId: string; promise: Promise<string> }> {
+    const displayQuestion = title
+      ? `**${title}**\n\n${question.prompt}`
+      : question.prompt;
+    const order = this.nextQuestionOrder++;
+    const processedQuestion =
+      await this.markdownProcessor.processMarkdown(displayQuestion);
+    const questionId = randomUUID();
+    let resolveAnswer!: (answer: string) => void;
+    const promise = new Promise<string>((resolve) => {
+      resolveAnswer = resolve;
+    });
+
+    this.questions.set(questionId, {
+      id: questionId,
+      order,
+      originalQuestion: displayQuestion,
+      processedQuestion,
+      choice: await this.processChoices(question),
+      resolve: resolveAnswer,
+    });
+
+    return { answerId: question.id, promise };
+  }
+
+  private async processChoices(
+    question: QuestionInput,
+  ): Promise<ChoiceConfig | undefined> {
+    if (!question.options?.length) {
+      return undefined;
+    }
+
+    return {
+      choices: await Promise.all(
+        question.options.map(async (option) => {
+          const description = option.description ?? "";
+          return {
+            label: option.label,
+            description,
+            processedDescription:
+              await this.markdownProcessor.processMarkdown(description),
+          };
+        }),
+      ),
+      multiple: question.multiple ?? false,
+    };
+  }
+
+  private notifyQuestionStateChanged(): void {
+    this.webviewProvider.updateQuestions(this.getQuestions());
+    this.playNotificationSound();
+    this.updateContexts();
+  }
+
+  private playNotificationSound(): void {
+    if (
+      !vscode.workspace
+        .getConfiguration("askHumanVscode")
+        .get("notification.enabled", true)
+    ) {
+      return;
+    }
+
+    const soundUri = vscode.Uri.joinPath(
+      this.context.extensionUri,
+      "media",
+      "notify.mp3",
+    );
+    playSound().play(soundUri.fsPath, (err: unknown) => {
+      if (err) {
+        this.outputChannel.warn(`Failed to play notification sound: ${err}`);
+      }
+    });
   }
 
   private async showQuestionPicker(): Promise<void> {
@@ -310,24 +281,21 @@ export class VSCodeExtension {
   }
 
   private updateContexts(): void {
-    const hasQuestions = this.questions.size > 0;
     vscode.commands.executeCommand(
       "setContext",
       "askHumanVscode.hasQuestions",
-      hasQuestions,
+      this.questions.size > 0,
     );
   }
 }
 
 let extensionInstance: VSCodeExtension | undefined;
 
-export function activate(context: vscode.ExtensionContext) {
+export function activate(context: vscode.ExtensionContext): void {
   extensionInstance = new VSCodeExtension(context);
 }
 
-export function deactivate() {
-  if (extensionInstance) {
-    extensionInstance.dispose();
-    extensionInstance = undefined;
-  }
+export function deactivate(): void {
+  extensionInstance?.dispose();
+  extensionInstance = undefined;
 }

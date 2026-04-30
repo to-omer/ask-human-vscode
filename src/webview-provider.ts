@@ -1,9 +1,9 @@
 import * as vscode from "vscode";
-import { VSCodeExtension, QuestionData } from "./extension";
+import { VSCodeExtension } from "./extension";
 
 interface ChoiceOption {
   label: string;
-  description: string;
+  description?: string;
   processedDescription: string;
 }
 
@@ -21,7 +21,8 @@ export class QuestionWebviewProvider implements vscode.WebviewViewProvider {
     processedQuestion: string;
     choice?: ChoiceConfig;
   }> = [];
-  private _currentAnswerText: string = "";
+  private _answerTextByQuestionId = new Map<string, string>();
+  private _selectedChoicesByQuestionId = new Map<string, string[]>();
   private _disposables: vscode.Disposable[] = [];
   private _isDisposed = false;
 
@@ -47,10 +48,26 @@ export class QuestionWebviewProvider implements vscode.WebviewViewProvider {
     context.subscriptions.push(...this._disposables);
   }
 
+  public show(): void {
+    if (this.getWebviewPosition() === "extension") {
+      this.revealExtensionView();
+      return;
+    }
+
+    this.createOrShowPanel();
+    if (this._panel) {
+      this.sendStateToWebview(this._panel.webview);
+    }
+  }
+
   public createOrShowPanel() {
     if (this._panel) {
-      this._panel.reveal(vscode.ViewColumn.Two);
-      return;
+      try {
+        this._panel.reveal(vscode.ViewColumn.Two);
+        return;
+      } catch (error) {
+        this.clearPanel(error);
+      }
     }
 
     this._panel = vscode.window.createWebviewPanel(
@@ -80,7 +97,9 @@ export class QuestionWebviewProvider implements vscode.WebviewViewProvider {
       this._panel = undefined;
     });
 
-    this.setupWebview(this._panel.webview);
+    if (!this.setupWebview(this._panel.webview)) {
+      this.clearPanel();
+    }
   }
 
   public resolveWebviewView(
@@ -92,31 +111,54 @@ export class QuestionWebviewProvider implements vscode.WebviewViewProvider {
       this._extensionView = webviewView;
     }
 
-    this.setupWebview(webviewView.webview);
+    const disposeDisposable = webviewView.onDidDispose(() => {
+      if (this._extensionView === webviewView) {
+        this._extensionView = undefined;
+      }
+    });
+    this._disposables.push(disposeDisposable);
 
-    this.sendStateToWebview(webviewView.webview);
+    if (!this.setupWebview(webviewView.webview)) {
+      this.clearExtensionView(webviewView);
+      return;
+    }
+
+    if (!this.sendStateToWebview(webviewView.webview)) {
+      this.clearExtensionView(webviewView);
+      return;
+    }
 
     const visibilityDisposable = webviewView.onDidChangeVisibility(() => {
       if (webviewView.visible) {
-        this.sendStateToWebview(webviewView.webview);
+        if (!this.sendStateToWebview(webviewView.webview)) {
+          this.clearExtensionView(webviewView);
+          return;
+        }
       }
     });
 
     this._disposables.push(visibilityDisposable);
   }
 
-  private sendStateToWebview(webview: vscode.Webview) {
-    webview.postMessage({
-      type: "questions",
-      questions: this._currentQuestions,
-    });
-
-    if (this._currentAnswerText) {
-      webview.postMessage({
-        type: "restoreAnswerText",
-        answerText: this._currentAnswerText,
-      });
-    }
+  private sendStateToWebview(webview: vscode.Webview): boolean {
+    return (
+      this.postToWebview(webview, {
+        type: "questions",
+        questions: this._currentQuestions,
+      }) &&
+      this.postToWebview(webview, {
+        type: "restoreAnswerTextByQuestionId",
+        answerTextByQuestionId: Object.fromEntries(
+          this._answerTextByQuestionId,
+        ),
+      }) &&
+      this.postToWebview(webview, {
+        type: "restoreSelectedChoicesByQuestionId",
+        selectedChoicesByQuestionId: Object.fromEntries(
+          this._selectedChoicesByQuestionId,
+        ),
+      })
+    );
   }
 
   public updateQuestions(
@@ -128,22 +170,59 @@ export class QuestionWebviewProvider implements vscode.WebviewViewProvider {
     }>,
   ) {
     this._currentQuestions = questions;
-
-    const position = this.getWebviewPosition();
-
-    if (position === "editor") {
-      this.createOrShowPanel();
-      if (this._panel) {
-        this.sendStateToWebview(this._panel.webview);
+    const questionIds = new Set(questions.map((question) => question.id));
+    for (const questionId of this._answerTextByQuestionId.keys()) {
+      if (!questionIds.has(questionId)) {
+        this._answerTextByQuestionId.delete(questionId);
       }
-    } else if (position === "extension") {
-      if (this._extensionView) {
-        this.sendStateToWebview(this._extensionView.webview);
-        this._extensionView.show();
+    }
+    for (const questionId of this._selectedChoicesByQuestionId.keys()) {
+      if (!questionIds.has(questionId)) {
+        this._selectedChoicesByQuestionId.delete(questionId);
       }
     }
 
-    this.updateBadge();
+    const position = this.getWebviewPosition();
+    const hasQuestions = this._currentQuestions.length > 0;
+
+    if (position === "editor") {
+      if (hasQuestions) {
+        this.createOrShowPanel();
+      }
+      if (this._panel) {
+        if (!this.sendStateToWebview(this._panel.webview)) {
+          this.clearPanel();
+          if (hasQuestions) {
+            this.createOrShowPanel();
+          }
+          if (this._panel) {
+            this.sendStateToWebview(this._panel.webview);
+          }
+        }
+      }
+    } else if (position === "extension") {
+      let shouldRevealExtensionView = hasQuestions;
+      if (this._extensionView) {
+        if (!this.sendStateToWebview(this._extensionView.webview)) {
+          this.clearExtensionView(this._extensionView);
+          if (hasQuestions) {
+            this.revealExtensionView();
+          }
+          return;
+        }
+        if (hasQuestions) {
+          try {
+            this._extensionView.show();
+            shouldRevealExtensionView = false;
+          } catch (error) {
+            this.clearExtensionView(this._extensionView, error);
+          }
+        }
+      }
+      if (shouldRevealExtensionView) {
+        this.revealExtensionView();
+      }
+    }
   }
 
   public closeEditor(): void {
@@ -230,23 +309,6 @@ export class QuestionWebviewProvider implements vscode.WebviewViewProvider {
     }
   }
 
-  private updateBadge(): void {
-    if (!this._extensionView) {
-      return;
-    }
-
-    const questionCount = this._currentQuestions.length;
-
-    if (questionCount === 0) {
-      this._extensionView.badge = undefined;
-    } else {
-      this._extensionView.badge = {
-        value: questionCount,
-        tooltip: `${questionCount} questions pending`,
-      };
-    }
-  }
-
   public dispose() {
     if (this._isDisposed) {
       return;
@@ -264,37 +326,70 @@ export class QuestionWebviewProvider implements vscode.WebviewViewProvider {
 
     this._extensionView = undefined;
     this._currentQuestions = [];
-    this._currentAnswerText = "";
+    this._answerTextByQuestionId.clear();
+    this._selectedChoicesByQuestionId.clear();
   }
 
-  private setupWebview(webview: vscode.Webview) {
+  private setupWebview(webview: vscode.Webview): boolean {
     if (this._isDisposed) {
-      return;
+      return false;
     }
 
-    webview.options = {
-      enableScripts: true,
-      localResourceRoots: [this.context.extensionUri],
-    };
+    try {
+      webview.options = {
+        enableScripts: true,
+        localResourceRoots: [this.context.extensionUri],
+      };
 
-    const messageDisposable = webview.onDidReceiveMessage((message) => {
-      if (this._isDisposed) {
-        return;
-      }
+      const messageDisposable = webview.onDidReceiveMessage((message) => {
+        if (this._isDisposed) {
+          return;
+        }
 
-      if (message.type === "answer") {
-        this._currentAnswerText = "";
-        this.extension.sendAnswer(message.answer, message.questionId);
-      } else if (message.type === "openFile") {
-        this.handleOpenFile(message);
-      } else if (message.type === "updateAnswerText") {
-        this._currentAnswerText = message.answerText || "";
-      }
-    });
+        if (message.type === "answer") {
+          this._answerTextByQuestionId.delete(message.questionId);
+          this._selectedChoicesByQuestionId.delete(message.questionId);
+          this.extension.sendAnswer(message.answer, message.questionId);
+        } else if (message.type === "openFile") {
+          this.handleOpenFile(message);
+        } else if (message.type === "updateAnswerText") {
+          if (!message.questionId) {
+            return;
+          }
 
-    this._disposables.push(messageDisposable);
+          const answerText = message.answerText || "";
+          if (answerText) {
+            this._answerTextByQuestionId.set(message.questionId, answerText);
+          } else {
+            this._answerTextByQuestionId.delete(message.questionId);
+          }
+        } else if (message.type === "updateSelectedChoices") {
+          if (!message.questionId) {
+            return;
+          }
 
-    this.setWebviewHTML(webview);
+          const selectedChoices = Array.isArray(message.selectedChoices)
+            ? message.selectedChoices
+            : [];
+          if (selectedChoices.length > 0) {
+            this._selectedChoicesByQuestionId.set(
+              message.questionId,
+              selectedChoices,
+            );
+          } else {
+            this._selectedChoicesByQuestionId.delete(message.questionId);
+          }
+        }
+      });
+
+      this._disposables.push(messageDisposable);
+
+      this.setWebviewHTML(webview);
+      return true;
+    } catch (error) {
+      this.reportDisposedWebview(error);
+      return false;
+    }
   }
 
   private setWebviewHTML(webview: vscode.Webview) {
@@ -374,12 +469,59 @@ export class QuestionWebviewProvider implements vscode.WebviewViewProvider {
 
   public postMessage(message: any): void {
     if (this._panel) {
-      this._panel.webview.postMessage(message);
+      if (!this.postToWebview(this._panel.webview, message)) {
+        this.clearPanel();
+      }
     }
 
     if (this._extensionView) {
-      this._extensionView.webview.postMessage(message);
+      if (!this.postToWebview(this._extensionView.webview, message)) {
+        this.clearExtensionView(this._extensionView);
+      }
     }
+  }
+
+  private postToWebview(webview: vscode.Webview, message: any): boolean {
+    try {
+      const result = webview.postMessage(message);
+      result.then(undefined, (error) => {
+        this.reportDisposedWebview(error);
+      });
+      return true;
+    } catch (error) {
+      this.reportDisposedWebview(error);
+      return false;
+    }
+  }
+
+  private clearPanel(error?: unknown): void {
+    this.reportDisposedWebview(error);
+    this._panel = undefined;
+  }
+
+  private clearExtensionView(
+    webviewView: vscode.WebviewView,
+    error?: unknown,
+  ): void {
+    this.reportDisposedWebview(error);
+    if (this._extensionView === webviewView) {
+      this._extensionView = undefined;
+    }
+  }
+
+  private revealExtensionView(): void {
+    void vscode.commands
+      .executeCommand("askHumanVscode.extensionView.focus")
+      .then(undefined, (error) => {
+        this.reportDisposedWebview(error);
+      });
+  }
+
+  private reportDisposedWebview(error?: unknown): void {
+    if (!error) {
+      return;
+    }
+    console.debug(`Ask Human webview unavailable: ${error}`);
   }
 
   private getNonce() {

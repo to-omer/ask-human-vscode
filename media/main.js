@@ -2,12 +2,75 @@ const vscode = acquireVsCodeApi();
 let currentQuestionId = null;
 let questions = [];
 let selectedChoices = new Set(); // For single/multiple selection tracking
+let answerTextByQuestionId = new Map();
+let selectedChoicesByQuestionId = new Map();
 let currentChoiceConfig = null;
 
 function stripHtml(html) {
   const div = document.createElement("div");
   div.innerHTML = html;
   return div.textContent || div.innerText || "";
+}
+
+function escapeHtml(value) {
+  const div = document.createElement("div");
+  div.textContent = value;
+  return div.innerHTML;
+}
+
+function getAnswerTextarea() {
+  return document.getElementById("answer-textarea");
+}
+
+function persistSelectedChoices() {
+  if (!currentQuestionId) {
+    return;
+  }
+
+  const selectedChoiceList = Array.from(selectedChoices);
+  if (selectedChoices.size > 0) {
+    selectedChoicesByQuestionId.set(currentQuestionId, selectedChoiceList);
+  } else {
+    selectedChoicesByQuestionId.delete(currentQuestionId);
+  }
+
+  vscode.postMessage({
+    type: "updateSelectedChoices",
+    questionId: currentQuestionId,
+    selectedChoices: selectedChoiceList,
+  });
+}
+
+function persistCurrentDraft() {
+  if (!currentQuestionId) {
+    return;
+  }
+
+  const answerText = getAnswerTextarea().value || "";
+  if (answerText) {
+    answerTextByQuestionId.set(currentQuestionId, answerText);
+  } else {
+    answerTextByQuestionId.delete(currentQuestionId);
+  }
+  persistSelectedChoices();
+
+  vscode.postMessage({
+    type: "updateAnswerText",
+    questionId: currentQuestionId,
+    answerText: answerText,
+  });
+}
+
+function restoreCurrentDraft() {
+  const answerTextarea = getAnswerTextarea();
+  answerTextarea.value = currentQuestionId
+    ? answerTextByQuestionId.get(currentQuestionId) || ""
+    : "";
+  selectedChoices = new Set(
+    currentQuestionId
+      ? selectedChoicesByQuestionId.get(currentQuestionId) || []
+      : [],
+  );
 }
 
 function updateQuestionDisplay() {
@@ -54,9 +117,12 @@ function updateQuestionDisplay() {
   }
 }
 
-function selectQuestion(questionId) {
+function selectQuestion(questionId, persistDraft = true) {
+  if (persistDraft) {
+    persistCurrentDraft();
+  }
   currentQuestionId = questionId;
-  selectedChoices.clear();
+  restoreCurrentDraft();
   updateQuestionDisplay();
 }
 
@@ -64,12 +130,15 @@ function sendAnswer() {
   const finalAnswer = createFinalAnswer();
 
   if (finalAnswer && currentQuestionId) {
+    const answeredQuestionId = currentQuestionId;
     vscode.postMessage({
       type: "answer",
       answer: finalAnswer,
-      questionId: currentQuestionId,
+      questionId: answeredQuestionId,
     });
-    const answerTextarea = document.getElementById("answer-textarea");
+    answerTextByQuestionId.delete(answeredQuestionId);
+    selectedChoicesByQuestionId.delete(answeredQuestionId);
+    const answerTextarea = getAnswerTextarea();
     answerTextarea.value = "";
     selectedChoices.clear();
     updateSelectionUI();
@@ -80,24 +149,57 @@ window.addEventListener("message", (event) => {
   const message = event.data;
 
   if (message.type === "questions") {
+    persistCurrentDraft();
     questions = message.questions;
 
     if (questions.length > 0) {
+      const questionIds = new Set(questions.map((question) => question.id));
+      for (const questionId of answerTextByQuestionId.keys()) {
+        if (!questionIds.has(questionId)) {
+          answerTextByQuestionId.delete(questionId);
+        }
+      }
+      for (const questionId of selectedChoicesByQuestionId.keys()) {
+        if (!questionIds.has(questionId)) {
+          selectedChoicesByQuestionId.delete(questionId);
+        }
+      }
+
       document.getElementById("no-question").style.display = "none";
       document.getElementById("question-container").style.display = "block";
 
-      selectQuestion(questions[0].id);
+      const nextQuestion = questionIds.has(currentQuestionId)
+        ? currentQuestionId
+        : questions[0].id;
+      selectQuestion(nextQuestion, false);
     } else {
+      currentQuestionId = null;
+      answerTextByQuestionId.clear();
+      selectedChoicesByQuestionId.clear();
+      selectedChoices.clear();
       document.getElementById("question-container").style.display = "none";
       document.getElementById("no-question").style.display = "block";
-      document.getElementById("answer-textarea").value = "";
+      getAnswerTextarea().value = "";
     }
   } else if (message.type === "selectQuestion") {
     selectQuestion(message.questionId);
-  } else if (message.type === "restoreAnswerText") {
-    const textarea = document.getElementById("answer-textarea");
-    if (textarea) {
-      textarea.value = message.answerText || "";
+  } else if (message.type === "restoreAnswerTextByQuestionId") {
+    answerTextByQuestionId = new Map(
+      Object.entries(message.answerTextByQuestionId || {}),
+    );
+    if (currentQuestionId) {
+      getAnswerTextarea().value =
+        answerTextByQuestionId.get(currentQuestionId) || "";
+    }
+  } else if (message.type === "restoreSelectedChoicesByQuestionId") {
+    selectedChoicesByQuestionId = new Map(
+      Object.entries(message.selectedChoicesByQuestionId || {}),
+    );
+    if (currentQuestionId) {
+      selectedChoices = new Set(
+        selectedChoicesByQuestionId.get(currentQuestionId) || [],
+      );
+      updateSelectionUI();
     }
   }
 });
@@ -109,7 +211,6 @@ function updateChoicesDisplay(choiceConfig) {
   const choicesList = document.getElementById("choices-list");
 
   currentChoiceConfig = choiceConfig;
-  selectedChoices.clear();
 
   if (choiceConfig && choiceConfig.choices.length > 0) {
     container.style.display = "block";
@@ -119,33 +220,36 @@ function updateChoicesDisplay(choiceConfig) {
       const card = document.createElement("div");
       card.className = "choice-card";
 
+      const labelHtml = escapeHtml(choice.label);
       const descriptionHtml = choice.processedDescription;
 
       if (choiceConfig.multiple) {
         card.innerHTML = `
           <label class="choice-container" for="choice-${index}">
-            <input type="checkbox" class="choice-checkbox" id="choice-${index}" value="${choice.label}">
+            <input type="checkbox" class="choice-checkbox" id="choice-${index}">
             <div class="choice-content">
-              <div class="choice-title">${choice.label}</div>
+              <div class="choice-title">${labelHtml}</div>
               <div class="choice-description">${descriptionHtml}</div>
             </div>
           </label>
         `;
 
         const checkbox = card.querySelector('input[type="checkbox"]');
+        checkbox.checked = selectedChoices.has(choice.label);
         checkbox.addEventListener("change", () => {
           if (checkbox.checked) {
             selectedChoices.add(choice.label);
           } else {
             selectedChoices.delete(choice.label);
           }
+          persistSelectedChoices();
           updateSelectionUI();
         });
       } else {
         card.innerHTML = `
           <div class="choice-container">
             <div class="choice-content">
-              <div class="choice-title">${choice.label}</div>
+              <div class="choice-title">${labelHtml}</div>
               <div class="choice-description">${descriptionHtml}</div>
             </div>
           </div>
@@ -154,12 +258,14 @@ function updateChoicesDisplay(choiceConfig) {
         card.addEventListener("click", () => {
           selectedChoices.clear();
           selectedChoices.add(choice.label);
+          persistSelectedChoices();
           updateSelectionUI();
         });
       }
 
       choicesList.appendChild(card);
     });
+    updateSelectionUI();
     if (typeof Prism !== "undefined") {
       Prism.highlightAllUnder(choicesList);
     }
@@ -169,15 +275,20 @@ function updateChoicesDisplay(choiceConfig) {
 }
 
 function updateSelectionUI() {
-  if (currentChoiceConfig && !currentChoiceConfig.multiple) {
-    document.querySelectorAll(".choice-card").forEach((card) => {
-      card.classList.remove("selected");
-      const title = card.querySelector(".choice-title")?.textContent;
-      if (title && selectedChoices.has(title)) {
-        card.classList.add("selected");
-      }
-    });
+  if (!currentChoiceConfig) {
+    return;
   }
+
+  document.querySelectorAll(".choice-card").forEach((card) => {
+    const title = card.querySelector(".choice-title")?.textContent;
+    const isSelected = Boolean(title && selectedChoices.has(title));
+    card.classList.toggle("selected", isSelected);
+
+    const checkbox = card.querySelector('input[type="checkbox"]');
+    if (checkbox) {
+      checkbox.checked = isSelected;
+    }
+  });
 }
 
 function createFinalAnswer() {
@@ -206,8 +317,16 @@ document
   .getElementById("answer-textarea")
   .addEventListener("input", (event) => {
     const answerText = event.target.value || "";
+    if (currentQuestionId) {
+      if (answerText) {
+        answerTextByQuestionId.set(currentQuestionId, answerText);
+      } else {
+        answerTextByQuestionId.delete(currentQuestionId);
+      }
+    }
     vscode.postMessage({
       type: "updateAnswerText",
+      questionId: currentQuestionId,
       answerText: answerText,
     });
   });

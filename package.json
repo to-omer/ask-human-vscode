@@ -25,10 +25,6 @@
   "contributes": {
     "commands": [
       {
-        "command": "askHumanVscode.toggleMCPServer",
-        "title": "Toggle MCP Server"
-      },
-      {
         "command": "askHumanVscode.showPanel",
         "title": "Show Panel",
         "category": "Ask Human"
@@ -103,7 +99,7 @@
         "askHumanVscode.questionDescription": {
           "type": "string",
           "default": "Question with relevant context, current situation, and specific guidance needed",
-          "description": "Description text for the question parameter (what to include in questions)",
+          "description": "Description text for each prompt field (what to include in questions)",
           "examples": [
             "Question with context, current situation, and specific help needed",
             "Question including relevant code, attempted approaches, and expected outcome",

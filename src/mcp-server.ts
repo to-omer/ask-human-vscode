@@ -3,91 +3,127 @@ import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/
 import { randomUUID } from "crypto";
 import express from "express";
 import { Server } from "http";
+import type { AddressInfo } from "net";
 import * as vscode from "vscode";
 import { z } from "zod";
 import packageJson from "../package.json";
+import { WindowRegistry, type WindowRegistration } from "./window-registry";
 
-interface ChoiceOption {
+export interface ChoiceOption {
   label: string;
-  description: string;
+  description?: string;
 }
 
-interface ChoiceConfig {
-  choices: ChoiceOption[];
-  multiple: boolean;
+export interface QuestionInput {
+  id: string;
+  prompt: string;
+  options?: ChoiceOption[];
+  multiple?: boolean;
+}
+
+export interface AskHumanRequest {
+  title?: string;
+  workspacePath?: string;
+  questions: QuestionInput[];
+}
+
+export interface AskHumanResult {
+  [key: string]: unknown;
+  answers: Record<string, string>;
+  submittedAt: string;
 }
 
 interface Extension {
-  askHuman(question: string, choice?: ChoiceConfig): Promise<string>;
-  updateStatusBar(): void;
+  askHumans(request: AskHumanRequest): Promise<AskHumanResult>;
+  getWorkspaceFolders(): string[];
 }
 
 export class HumanMCPServer {
+  private readonly expressApp = express();
+  private readonly instanceId = randomUUID();
+  private readonly registry?: WindowRegistry;
+  private actualPort: number | undefined;
   private extension!: Extension;
-  private expressApp: express.Application;
   private httpServer: Server | null = null;
-  private instanceId: string;
-  private outputChannel: vscode.LogOutputChannel;
-  private port: number;
+  private middlewareConfigured = false;
 
-  constructor(outputChannel: vscode.LogOutputChannel, port: number) {
-    this.expressApp = express();
-    this.instanceId = randomUUID();
-    this.outputChannel = outputChannel;
-    this.port = port;
+  constructor(
+    private readonly outputChannel: vscode.LogOutputChannel,
+    private readonly preferredPort: number,
+    registryStoragePath?: string,
+  ) {
+    if (registryStoragePath) {
+      this.registry = new WindowRegistry(registryStoragePath);
+    }
   }
 
-  private getToolDescription(): string {
-    const config = vscode.workspace.getConfiguration("askHumanVscode");
-    return config.get<string>("toolDescription")!;
-  }
+  public async start(
+    extension: Extension,
+    port = this.preferredPort,
+  ): Promise<void> {
+    if (this.httpServer) {
+      return;
+    }
 
-  private getQuestionDescription(): string {
-    const config = vscode.workspace.getConfiguration("askHumanVscode");
-    return config.get<string>("questionDescription")!;
-  }
+    this.extension = extension;
+    this.setupExpressMiddleware();
 
-  private setupResponseLogging(
-    req: express.Request,
-    res: express.Response,
-  ): void {
-    const responseChunks: Buffer[] = [];
-    const outputChannel = this.outputChannel;
-    let logged = false;
+    return new Promise((resolve, reject) => {
+      this.httpServer = this.expressApp.listen(port, "127.0.0.1");
 
-    const addChunk = (chunk: any) => {
-      if (typeof chunk === "string") {
-        responseChunks.push(Buffer.from(chunk));
-      } else if (Buffer.isBuffer(chunk)) {
-        responseChunks.push(chunk);
-      }
-    };
+      this.httpServer.once("listening", async () => {
+        const address = this.httpServer?.address() as AddressInfo | null;
+        this.actualPort = address?.port ?? port;
 
-    const originalWrite = res.write.bind(res);
-    res.write = function (chunk: any, encoding?: any, callback?: any) {
-      addChunk(chunk);
-      return originalWrite(chunk, encoding, callback);
-    };
+        try {
+          await this.updateRegistration();
+        } catch (error) {
+          this.stop();
+          reject(error);
+          return;
+        }
 
-    const originalEnd = res.end.bind(res);
-    res.end = function (chunk?: any, encoding?: any, callback?: any) {
-      if (chunk) {
-        addChunk(chunk);
-      }
-      if (!logged) {
-        const fullResponse = Buffer.concat(responseChunks)
-          .toString("utf-8")
-          .trim();
-        outputChannel.info(
-          `Response: ${req.method} ${req.path} - ${fullResponse}`,
+        this.outputChannel.info(
+          `MCP Server started successfully on port ${this.actualPort}`,
         );
-        logged = true;
-      }
-      return originalEnd(chunk, encoding, callback);
-    };
+        resolve();
+      });
+
+      this.httpServer.once("error", (error: NodeJS.ErrnoException) => {
+        this.httpServer = null;
+        this.actualPort = undefined;
+        reject(error);
+      });
+    });
   }
 
-  private getServer() {
+  public stop(): void {
+    if (!this.httpServer) {
+      return;
+    }
+
+    this.httpServer.close();
+    this.registry?.remove(this.instanceId).catch((error) => {
+      this.outputChannel.warn(`Failed to unregister MCP server: ${error}`);
+    });
+    this.outputChannel.info("MCP Server stopped successfully");
+    this.httpServer = null;
+    this.actualPort = undefined;
+  }
+
+  public async updateRegistration(): Promise<void> {
+    if (!this.registry || !this.httpServer || !this.actualPort) {
+      return;
+    }
+
+    await this.registry.upsert({
+      instanceId: this.instanceId,
+      port: this.actualPort,
+      workspaceFolders: this.extension.getWorkspaceFolders(),
+    });
+  }
+
+  private getServer(): McpServer {
     const server = new McpServer({
       name: "vscode-ask-human-mcp",
       version: packageJson.version,
@@ -98,38 +134,18 @@ export class HumanMCPServer {
       {
         title: "Ask Human in VS Code",
         description: this.getToolDescription(),
-        inputSchema: {
-          question: z.string().describe(this.getQuestionDescription()),
-          choice: z
-            .object({
-              choices: z
-                .array(
-                  z.object({
-                    label: z.string().describe("Choice title"),
-                    description: z.string().describe("Markdown description"),
-                  }),
-                )
-                .describe("Available options"),
-              multiple: z
-                .boolean()
-                .default(false)
-                .describe("Allow multiple selections"),
-            })
-            .optional()
-            .describe("Optional choice interface"),
+        inputSchema: this.getInputSchemaShape(),
+        outputSchema: {
+          answers: z.record(z.string()).describe("Answers keyed by question id"),
+          submittedAt: z.string().describe("ISO timestamp when all answers were submitted"),
         },
       },
-      async ({ question, choice }) => {
+      async (input) => {
         try {
-          const answer = await this.extension.askHuman(question, choice);
-
+          const result = await this.askWithRouting(this.parseInput(input));
           return {
-            content: [
-              {
-                type: "text",
-                text: answer,
-              },
-            ],
+            structuredContent: result,
+            content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
           };
         } catch (error) {
           throw new Error(`Failed to get answer from developer: ${error}`);
@@ -140,59 +156,113 @@ export class HumanMCPServer {
     return server;
   }
 
-  public async start(extension: Extension): Promise<void> {
-    this.extension = extension;
-    this.setupExpressMiddleware();
-
-    return new Promise((resolve, reject) => {
-      this.httpServer = this.expressApp.listen(this.port, "127.0.0.1");
-
-      this.httpServer.on("listening", () => {
-        this.outputChannel.info(
-          `MCP Server started successfully on port ${this.port}`,
-        );
-        resolve();
-      });
-
-      this.httpServer.on("error", (error: NodeJS.ErrnoException) => {
-        this.httpServer = null;
-        if (error.code === "EADDRINUSE") {
-          reject(new Error(`Port ${this.port} is already in use`));
-        } else {
-          reject(error);
-        }
-      });
+  private getInputSchemaShape() {
+    const optionSchema = z.object({
+      label: z.string().describe("Choice title"),
+      description: z.string().optional().describe("Markdown description"),
     });
+
+    return {
+      title: z.string().optional().describe("Optional title for the request"),
+      workspacePath: z
+        .string()
+        .optional()
+        .describe("Absolute current working directory or workspace folder"),
+      questions: z
+        .array(
+          z.object({
+            id: z.string().min(1).describe("Stable answer key"),
+            prompt: z.string().describe(this.getQuestionDescription()),
+            options: z
+              .array(optionSchema)
+              .min(1)
+              .optional()
+              .describe("Optional selectable answers"),
+            multiple: z
+              .boolean()
+              .optional()
+              .describe("Allow multiple selections when options are provided"),
+          }),
+        )
+        .min(1)
+        .max(25)
+        .describe("Questions to ask in this request"),
+    };
   }
 
-  private setupExpressMiddleware() {
-    this.expressApp.use(express.json());
+  private parseInput(input: unknown): AskHumanRequest {
+    const request = z.object(this.getInputSchemaShape()).parse(input);
+    const questionIds = new Set<string>();
 
-    this.expressApp.use((req, _res, next) => {
-      if (
-        req.method === "POST" &&
-        req.body &&
-        Object.keys(req.body).length > 0
-      ) {
-        this.outputChannel.info(
-          `Request: ${req.method} ${req.path} - ${JSON.stringify(req.body)}`,
-        );
-      } else {
-        this.outputChannel.info(`Request: ${req.method} ${req.path}`);
+    for (const question of request.questions) {
+      if (questionIds.has(question.id)) {
+        throw new Error(`Duplicate question id: ${question.id}`);
       }
-      next();
-    });
+      questionIds.add(question.id);
+    }
 
-    this.expressApp.use((req, res, next) => {
-      const originalJson = res.json;
-      res.json = (data: any) => {
-        this.outputChannel.info(
-          `Response: ${req.method} ${req.path} - ${JSON.stringify(data)}`,
+    return request;
+  }
+
+  private async askWithRouting(
+    request: AskHumanRequest,
+  ): Promise<AskHumanResult> {
+    const target = await this.findRouteTarget(request.workspacePath);
+    if (target && target.instanceId !== this.instanceId) {
+      this.outputChannel.info(
+        `Routing question to VS Code window ${target.instanceId} on port ${target.port}`,
+      );
+      try {
+        return await this.forwardAskHuman(target, request);
+      } catch (error) {
+        this.outputChannel.warn(
+          `Failed to route question to VS Code window ${target.instanceId}: ${error}`,
         );
-        return originalJson.call(res, data);
-      };
-      next();
-    });
+        await this.registry?.remove(target.instanceId);
+      }
+    }
+
+    return this.extension.askHumans(request);
+  }
+
+  private async findRouteTarget(
+    workspacePath?: string,
+  ): Promise<WindowRegistration | undefined> {
+    if (!workspacePath || !this.registry) {
+      return undefined;
+    }
+    return this.registry.findByWorkspacePath(workspacePath);
+  }
+
+  private async forwardAskHuman(
+    target: WindowRegistration,
+    request: AskHumanRequest,
+  ): Promise<AskHumanResult> {
+    const response = await fetch(
+      `http://127.0.0.1:${target.port}/internal/ask-human`,
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(request),
+      },
+    );
+
+    if (!response.ok) {
+      throw new Error(
+        `Target VS Code window returned HTTP ${response.status}: ${response.statusText}`,
+      );
+    }
+
+    return (await response.json()) as AskHumanResult;
+  }
+
+  private setupExpressMiddleware(): void {
+    if (this.middlewareConfigured) {
+      return;
+    }
+    this.middlewareConfigured = true;
+
+    this.expressApp.use(express.json());
 
     this.expressApp.post("/mcp", async (req, res) => {
       try {
@@ -201,8 +271,6 @@ export class HumanMCPServer {
           sessionIdGenerator: undefined,
         });
 
-        this.setupResponseLogging(req, res);
-
         res.on("close", () => {
           transport.close();
           server.close();
@@ -210,52 +278,35 @@ export class HumanMCPServer {
 
         await server.connect(transport);
         await transport.handleRequest(req, res, req.body);
-      } catch (error) {
+      } catch {
         if (!res.headersSent) {
           res.status(500).json({
             jsonrpc: "2.0",
-            error: {
-              code: -32603,
-              message: "Internal server error",
-            },
+            error: { code: -32603, message: "Internal server error" },
             id: null,
           });
         }
       }
     });
 
-    this.expressApp.get("/", (_req, res) => {
-      res.json({
-        name: "VS Code Ask Human MCP Server",
-        version: packageJson.version,
-        status: "running",
-        endpoint: "/mcp",
-        instanceId: this.instanceId,
-      });
-    });
-
-    this.expressApp.post("/shutdown", (_req, res) => {
-      this.stop();
-
-      res.json({
-        success: true,
-      });
-
-      setImmediate(() => {
-        this.extension.updateStatusBar();
-      });
+    this.expressApp.post("/internal/ask-human", async (req, res) => {
+      try {
+        res.json(await this.extension.askHumans(this.parseInput(req.body)));
+      } catch (error) {
+        res.status(500).json({
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
     });
   }
 
-  public stop() {
-    if (this.httpServer) {
-      this.httpServer.close();
-      this.outputChannel.info("MCP Server stopped successfully");
-      this.httpServer = null;
-    }
+  private getToolDescription(): string {
+    const config = vscode.workspace.getConfiguration("askHumanVscode");
+    return config.get<string>("toolDescription")!;
   }
 
-  public isRunning(): boolean {
-    return this.httpServer !== null;
+  private getQuestionDescription(): string {
+    const config = vscode.workspace.getConfiguration("askHumanVscode");
+    return config.get<string>("questionDescription")!;
   }
 }

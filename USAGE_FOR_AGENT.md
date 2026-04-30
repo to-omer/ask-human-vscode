@@ -4,7 +4,7 @@
 
 - **Tool Name**: `ask-human-vscode`
 - **Purpose**: Query human developers for clarification, decisions, and guidance during development tasks
-- **Response**: Text answer from developer via VS Code interface
+- **Response**: JSON answer map keyed by question id
 - **Features**: Supports markdown formatting, file links with line numbers for rich context presentation
 
 ## When to Ask Questions
@@ -55,7 +55,12 @@
 
 ```json
 {
-  "question": "I'm implementing user authentication in `src/auth.ts:25`. Should I use JWT tokens or session-based authentication?\n\n**Current context:**\n- Mobile client support required\n- ~1000 concurrent users\n- Existing session middleware in `src/middleware/auth.ts:10`\n\n**Options:**\n1. JWT with refresh tokens\n2. Session-based with Redis store"
+  "questions": [
+    {
+      "id": "auth_strategy",
+      "prompt": "I'm implementing user authentication in `src/auth.ts:25`. Should I use JWT tokens or session-based authentication?\n\n**Current context:**\n- Mobile client support required\n- ~1000 concurrent users\n- Existing session middleware in `src/middleware/auth.ts:10`\n\n**Options:**\n1. JWT with refresh tokens\n2. Session-based with Redis store"
+    }
+  ]
 }
 ```
 
@@ -63,24 +68,26 @@
 
 ```json
 {
-  "question": "Which state management approach should I use for the user dashboard in `src/components/Dashboard.tsx`?",
-  "choice": {
-    "choices": [
-      {
-        "label": "React Context",
-        "description": "**Pros:** Built-in, no dependencies, simple setup. **Cons:** Performance issues with frequent updates, re-renders entire tree. **Best for:** Simple shared state"
-      },
-      {
-        "label": "Redux Toolkit",
-        "description": "**Pros:** Predictable state updates, DevTools, time-travel debugging. **Cons:** Boilerplate code, learning curve. **Best for:** Complex state logic"
-      },
-      {
-        "label": "Zustand",
-        "description": "**Pros:** Minimal boilerplate, TypeScript support, small bundle. **Cons:** Less ecosystem support, newer library. **Best for:** Medium complexity with simplicity"
-      }
-    ],
-    "multiple": false
-  }
+  "questions": [
+    {
+      "id": "state_management",
+      "prompt": "Which state management approach should I use for the user dashboard in `src/components/Dashboard.tsx`?",
+      "options": [
+        {
+          "label": "React Context",
+          "description": "**Pros:** Built-in, no dependencies, simple setup. **Cons:** Performance issues with frequent updates, re-renders entire tree. **Best for:** Simple shared state"
+        },
+        {
+          "label": "Redux Toolkit",
+          "description": "**Pros:** Predictable state updates, DevTools, time-travel debugging. **Cons:** Boilerplate code, learning curve. **Best for:** Complex state logic"
+        },
+        {
+          "label": "Zustand",
+          "description": "**Pros:** Minimal boilerplate, TypeScript support, small bundle. **Cons:** Less ecosystem support, newer library. **Best for:** Medium complexity with simplicity"
+        }
+      ]
+    }
+  ]
 }
 ```
 
@@ -92,7 +99,7 @@ Set `"multiple": true` to allow selecting multiple options from the choice list.
 
 ### Do
 
-- Ask one focused question per tool call that can be fully answered in a single response
+- Ask one focused question, or a small related set of questions, that can be fully answered in a single response
 - Include complete context: relevant code snippets, file paths, error messages, and current state
 - Present multiple options when they exist, showing alternatives you've considered with their trade-offs
 - Specify all relevant constraints and requirements upfront
