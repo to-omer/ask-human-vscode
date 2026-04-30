@@ -2,6 +2,37 @@
 
 All notable changes to the "ask-human-vscode" extension will be documented in this file.
 
+## [1.5.0] - 2026-05-01
+
+### Breaking Changes
+
+- Replaced the single-question MCP input (`question`, `choice`) with `questions[]`
+- Replaced plain text MCP responses with structured `answers` keyed by question id
+
+### Added
+
+- Multi-question requests in a single tool call
+- VS Code window routing based on workspace path
+- Registry-backed routing for multiple VS Code windows
+
+### Changed
+
+- Preserved per-question drafts and selected choices while switching questions
+- Kept pending questions in request order
+- Starts secondary VS Code windows on an available port and forwards matching workspace requests
+
+### Fixed
+
+- Prevented disposed webview errors during question updates
+- Escaped choice labels before rendering them in the webview
+- Restored the panel reopen command behavior
+
+### Removed
+
+- Activity Bar question count badge to avoid stale badge state
+- Status bar MCP server toggle
+- Port takeover and shutdown endpoints
+
 ## [1.4.0] - 2025-07-19
 
 ### Added
